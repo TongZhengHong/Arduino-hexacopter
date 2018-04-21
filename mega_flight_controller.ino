@@ -7,10 +7,10 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 //    TODO: Check transmitter values
-//		Check Gyro Accelerometer orientation data
-//		Check for start stop (sets start var accordingly)
-//		Check PID values are appropriate
-//		Ensure that motors can spin at different values
+//		TODO: Check Gyro Accelerometer orientation data
+//		TODO: Check for start stop (sets start var accordingly)
+//		TODO: Check PID values are appropriate
+//		TODO: Ensure that motors can spin at different values
 
 #include <Wire.h>
 #include <EEPROM.h>
@@ -71,6 +71,7 @@ float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_
 void setup(){
   Wire.begin();
   Serial.begin(9600);
+  delay(500);
 
   pinMode(13, OUTPUT);
   digitalWrite(13, HIGH);
@@ -79,6 +80,11 @@ void setup(){
     eeprom_data[start] = EEPROM.read(start);
   while (eeprom_data[24] != 'J' || eeprom_data[25] != 'M' || eeprom_data[26] != 'B')
     delay(10);
+
+  receiver_input_channel_1 = 0;
+  receiver_input_channel_2 = 0;
+  receiver_input_channel_3 = 0;
+  receiver_input_channel_4 = 0;
 
   PCICR |= (1 << PCIE2); // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port K.
 
@@ -93,17 +99,19 @@ void setup(){
   PCMSK2 |= (1 << PCINT23); // set PCINT23 (digital input A15)to trigger an interrupt on state change
 
   DDRA |= B00111111; // Set digital pins 22 - 27 to OUTPUT
+  Serial.println("Initialise pins");
 
   if (!lsm.begin())  {
     Serial.println("Oops ... unable to initialize the LSM9DS0. Check your wiring!");
-    while (1)
-      ;
+    while (1);
   }
 
+  Serial.println("Setting up sensors...");
   setupSensor();
 
   calibrateSensors();
 
+  Serial.println("Waiting for receiver connection...");
   //Wait until the receiver is active and the throtle is set to the lower position.
   while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
     receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
@@ -111,8 +119,7 @@ void setup(){
     start++;                                                //While waiting increment start whith every loop.
 
     delay(3); //Wait 3 milliseconds before the next loop.
-    if (start == 125)
-    {
+    if (start == 125)    {
       digitalWrite(13, !digitalRead(13)); //Change the led status.
       start = 0;                          //Start again at 0.
     }
@@ -121,6 +128,7 @@ void setup(){
 
   //Battery voltage calculation
   battery_voltage = analogRead(A0) * (5000 / 1023.0) + 20;
+  Serial.println("Current battery reading: " + (String) battery_voltage);
 
   digitalWrite(13, LOW);
   Serial.println("SETUP DONE!");
@@ -135,15 +143,21 @@ void loop(){
   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
 
-  Serial.println(receiver_input_channel_1);
-  Serial.println(receiver_input_channel_2);
-  Serial.println(receiver_input_channel_3);
-  Serial.println(receiver_input_channel_4);
+  for (int i = 1; i < 9; i++) {
+      Serial.print(receiver_input[i]);
+      Serial.print(", ");
+  }
   Serial.println("");
 
-  return;
-
   calculate_pitch_roll();
+
+  Serial.println(angle_pitch);
+  Serial.println(angle_roll);
+  Serial.println("");
+
+  delay(20);
+
+  return;
 
   check_start_stop();
 
@@ -173,8 +187,8 @@ void calculate_pitch_roll(){
   gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
   gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
 
-  angle_pitch += gyro_pitch * 0.005;
-  angle_roll += gyro_roll * 0.005;
+  angle_pitch += gyro_pitch * 0.015;
+  angle_roll += gyro_roll * 0.015;
 
   float constant = 0.02 * (3.142 / 180);
   angle_pitch -= angle_roll * sin(gyro_yaw * constant);
@@ -196,8 +210,8 @@ void calculate_pitch_roll(){
   angle_pitch_acc -= acc_pitch_cal; //Accelerometer calibration value for pitch.
   angle_roll_acc -= acc_roll_cal;   //Accelerometer calibration value for roll.
 
-  angle_pitch = angle_pitch * 0.99 + angle_pitch_acc * 0.01; //Correct the drift of gyro pitch angle with the accl pitch angle.
-  angle_roll = angle_roll * 0.99 + angle_roll_acc * 0.01;    //Correct the drift of gyro roll angle with the accl roll angle.
+  angle_pitch = angle_pitch * 0.995 + angle_pitch_acc * 0.005; //Correct the drift of gyro pitch angle with the accl pitch angle.
+  angle_roll = angle_roll * 0.995 + angle_roll_acc * 0.005;    //Correct the drift of gyro roll angle with the accl roll angle.
 
   pitch_level_adjust = angle_pitch * 15; //Calculate the pitch angle correction
   roll_level_adjust = angle_roll * 15;   //Calculate the roll angle correction
@@ -205,14 +219,11 @@ void calculate_pitch_roll(){
 
 void check_start_stop(){
   //For starting the motors: throttle low and yaw left (step 1).
-  if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)
-  {
-    if (start == 0)
-    {
+  if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
+    if (start == 0)    {
       start = 1;
     }
-    else if (start == 2)
-    { //Stop motors --> check if already started
+    else if (start == 2)    { //Stop motors --> check if already started
       start = 3;
     }
   }
@@ -473,6 +484,7 @@ void calibrateSensors(){
   gyro_cal[3] /= 2000;
 
   Serial.println("Gyroscope calibration done!");
+  for (int i = 0; i < 3; i++) Serial.println(gyro_cal[i]);
 
   ////////////////////////////////////////// Accelometer calibration ////////////////////////////////////////
   for (int i = 0; i < 2000; i++)  {
@@ -517,12 +529,14 @@ void calibrateSensors(){
   angle_roll = 0;
 
   Serial.println("Accelerometer calibration done!");
+  Serial.println(acc_pitch_cal);
+  Serial.println(acc_roll_cal);
 }
 
 ISR(PCINT2_vect){
   current_time = micros();
   //============================================= Channel 1 =============================================
-  if (PINK & B00000001)  { //Is input A8 high?
+  if (PINK & B10000000)  { //Is input A15 high?
     if (last_channel_1 == 0)    {                         //Input A8 changed from 0 to 1
       last_channel_1 = 1;     //Remember current input state
       timer_1 = current_time; //Set timer_1 to current_time
@@ -534,7 +548,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 2 =============================================
-  if (PINK & B00000010)  { //Is input A9 high?
+  if (PINK & B01000000)  { //Is input A14 high?
     if (last_channel_2 == 0)    {                         //Input A9 changed from 0 to 1
       last_channel_2 = 1;     //Remember current input state
       timer_2 = current_time; //Set timer_2 to current_time
@@ -546,7 +560,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 3 =============================================
-  if (PINK & B00000100)  { //Is input A10 high?
+  if (PINK & B00100000)  { //Is input A13 high?
     if (last_channel_3 == 0)    {                         //Input A10 changed from 0 to 1
       last_channel_3 = 1;     //Remember current input state
       timer_3 = current_time; //Set timer_3 to current_time
@@ -558,7 +572,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 4 =============================================
-  if (PINK & B00001000)  { //Is input A11 high?
+  if (PINK & B00010000)  { //Is input A12 high?
     if (last_channel_4 == 0)    {                         //Input A11 changed from 0 to 1
       last_channel_4 = 1;     //Remember current input state
       timer_4 = current_time; //Set timer_4 to current_time
@@ -570,7 +584,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 5 =============================================
-  if (PINK & B00010000)  { //Is input A12 high?
+  if (PINK & B00001000)  { //Is input A11 high?
     if (last_channel_5 == 0)    {                         //Input A12 changed from 0 to 1
       last_channel_5 = 1;     //Remember current input state
       timer_5 = current_time; //Set timer_5 to current_time
@@ -582,7 +596,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 6 =============================================
-  if (PINK & B00100000)  { //Is input A13 high?
+  if (PINK & B00000100)  { //Is input A10 high?
     if (last_channel_6 == 0)    {                         //Input A13 changed from 0 to 1
       last_channel_6 = 1;     //Remember current input state
       timer_6 = current_time; //Set timer_6 to current_time
@@ -594,7 +608,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 7 =============================================
-  if (PINK & B01000000)  { //Is input A14 high?
+  if (PINK & B00000010)  { //Is input A9 high?
     if (last_channel_7 == 0)    {                         //Input A14 changed from 0 to 1
       last_channel_7 = 1;     //Remember current input state
       timer_7 = current_time; //Set timer_7 to current_time
@@ -606,7 +620,7 @@ ISR(PCINT2_vect){
   }
 
   //============================================= Channel 8 =============================================
-  if (PINK & B10000000)  { //Is input A15 high?
+  if (PINK & B00000001)  { //Is input A8 high?
     if (last_channel_8 == 0)    {                         //Input A15 changed from 0 to 1
       last_channel_8 = 1;     //Remember current input state
       timer_8 = current_time; //Set timer_8 to current_time
