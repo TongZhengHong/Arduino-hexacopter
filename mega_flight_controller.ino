@@ -6,8 +6,11 @@
 //  Channel 4: YAW
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-//    TODO: Check transmitter values
-//		TODO: Check Gyro Accelerometer orientation data
+//* #define DEBUG_TRANSMITTER
+//* #define DEBUG_SENSOR
+//* #define DEBUG_START_STOP
+
+//!		TODO: Check Gyro Accelerometer orientation data
 //		TODO: Check for start stop (sets start var accordingly)
 //		TODO: Check PID values are appropriate
 //		TODO: Ensure that motors can spin at different values
@@ -138,28 +141,14 @@ void setup(){
 //////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(){
-  receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
-  receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
-  receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
-  receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
-
-  for (int i = 1; i < 9; i++) {
-      Serial.print(receiver_input[i]);
-      Serial.print(", ");
-  }
-  Serial.println("");
+  convert_transmitter_values();
 
   calculate_pitch_roll();
-
-  Serial.println(angle_pitch);
-  Serial.println(angle_roll);
-  Serial.println("");
-
-  delay(20);
-
-  return;
+  //delay(20);
 
   check_start_stop();
+
+  return;
 
   set_pid_offsets();
 
@@ -215,6 +204,12 @@ void calculate_pitch_roll(){
 
   pitch_level_adjust = angle_pitch * 15; //Calculate the pitch angle correction
   roll_level_adjust = angle_roll * 15;   //Calculate the roll angle correction
+
+  #ifdef DEBUG_SENSOR
+    Serial.println(angle_pitch);
+    Serial.println(angle_roll);
+    Serial.println("");
+  #endif
 }
 
 void check_start_stop(){
@@ -449,6 +444,21 @@ int convert_receiver_channel(byte function){
   }
   else
     return 1500;
+}
+
+void convert_transmitter_values(){
+  receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
+  receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
+  receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
+  receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+
+  #ifdef DEBUG_TRANSMITTER
+    for (int i = 1; i < 9; i++) {
+        Serial.print(receiver_input[i]);
+        Serial.print(", ");
+    }
+    Serial.println("");
+  #endif
 }
 
 void setupSensor(){
