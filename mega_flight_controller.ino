@@ -8,7 +8,10 @@
 
 //* #define DEBUG_TRANSMITTER
 //* #define DEBUG_SENSOR
-//* #define DEBUG_START_STOP
+#define DEBUG_START_STOP
+//  #define DEBUG_PID_OFFSETS
+//  #define DEBUG_PID
+#define DEBUG_ESC_OUTPUT
 
 //!		TODO: Check Gyro Accelerometer orientation data
 //		TODO: Check for start stop (sets start var accordingly)
@@ -148,13 +151,15 @@ void loop(){
 
   check_start_stop();
 
-  return;
-
   set_pid_offsets();
 
   calculate_pid();
 
   calculate_esc_output();
+
+  delay(20);
+
+  return;
 
   set_escs();
 
@@ -213,6 +218,10 @@ void calculate_pitch_roll(){
 }
 
 void check_start_stop(){
+  #ifdef DEBUG_START_STOP
+    Serial.println("Start value: " + (String) start);
+  #endif
+
   //For starting the motors: throttle low and yaw left (step 1).
   if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
     if (start == 0)    {
@@ -286,6 +295,15 @@ void set_pid_offsets(){
     else if (receiver_input_channel_4 < 1492)
       pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
   }
+
+  #ifdef DEBUG_PID_OFFSETS
+    Serial.print(pid_roll_setpoint);
+    Serial.print(", ");
+    Serial.print(pid_pitch_setpoint);
+    Serial.print(", ");
+    Serial.print(pid_yaw_setpoint);
+    Serial.println("");
+  #endif
 }
 
 void calculate_pid(){
@@ -336,6 +354,15 @@ void calculate_pid(){
     pid_output_yaw = pid_max_yaw * -1;
 
   pid_last_yaw_d_error = pid_error_temp;
+
+  #ifdef DEBUG_PID
+    Serial.print(pid_output_roll);
+    Serial.print(", ");
+    Serial.print(pid_output_pitch);
+    Serial.print(", ");
+    Serial.print(pid_output_yaw);
+    Serial.println("");
+  #endif
 }
 
 void calculate_esc_output(){
@@ -373,9 +400,7 @@ void calculate_esc_output(){
     if (esc_4 > 2000)      esc_4 = 2000; //Limit the esc-4 pulse to 2000us.
     if (esc_5 > 2000)      esc_5 = 2000; //Limit the esc-5 pulse to 2000us.
     if (esc_6 > 2000)      esc_6 = 2000; //Limit the esc-6 pulse to 2000us.
-  }
-
-  else  {
+  }  else  {
     esc_1 = 1000; //If start is not 2 keep a 1000us pulse for esc-1.
     esc_2 = 1000; //If start is not 2 keep a 1000us pulse for esc-2.
     esc_3 = 1000; //If start is not 2 keep a 1000us pulse for esc-3.
@@ -383,6 +408,21 @@ void calculate_esc_output(){
     esc_5 = 1000; //If start is not 2 keep a 1000us pulse for esc-5.
     esc_6 = 1000; //If start is not 2 keep a 1000us pulse for esc-6.
   }
+
+  #ifdef DEBUG_ESC_OUTPUT
+    Serial.print(esc_1);
+    Serial.print(", ");
+    Serial.print(esc_2);
+    Serial.print(", ");
+    Serial.print(esc_3);
+    Serial.print(", ");
+    Serial.print(esc_4);
+    Serial.print(", ");
+    Serial.print(esc_5);
+    Serial.print(", ");
+    Serial.print(esc_6);
+    Serial.println("");
+  #endif
 }
 
 void set_escs(){
