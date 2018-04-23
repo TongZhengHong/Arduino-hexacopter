@@ -6,17 +6,16 @@
 //  Channel 4: YAW
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-//* #define DEBUG_TRANSMITTER
-//* #define DEBUG_SENSOR
+//#define DEBUG_TRANSMITTER
+//#define DEBUG_SENSOR
 #define DEBUG_START_STOP
-//  #define DEBUG_PID_OFFSETS
-//  #define DEBUG_PID
+//#define DEBUG_PID_OFFSETS
+//#define DEBUG_PID
 #define DEBUG_ESC_OUTPUT
 
-//!		TODO: Check Gyro Accelerometer orientation data
-//		TODO: Check for start stop (sets start var accordingly)
-//		TODO: Check PID values are appropriate
-//		TODO: Ensure that motors can spin at different values
+//TODO: Test gyroscope and accelerometer individually
+//TODO: Check PID values are appropriate
+//TODO: Ensure that motors can spin at different values
 
 #include <Wire.h>
 #include <EEPROM.h>
