@@ -12,6 +12,7 @@
 //#define DEBUG_PID_OFFSETS
 //#define DEBUG_PID
 #define DEBUG_ESC_OUTPUT
+//#define DEBUG_BATTERY_VOLTAGE
 
 //TODO: Test gyroscope and accelerometer individually
 //TODO: Check PID values are appropriate
@@ -458,6 +459,10 @@ void check_battery_voltage(){
 
   if (battery_voltage < 680 && battery_voltage > 600)
     digitalWrite(13, HIGH);
+  
+  #ifdef DEBUG_BATTERY_VOLTAGE
+    Serial.println("Battery left: " + (String) battery_voltage);
+  #endif
 }
 
 int convert_receiver_channel(byte function){
