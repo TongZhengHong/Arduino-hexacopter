@@ -18,6 +18,12 @@ double gyro_cal[4], acc_pitch_cal, acc_roll_cal;
 void setup() {
   Wire.begin();
   Serial.begin(9600);
+  delay(500);
+
+  if (!lsm.begin())  {
+    Serial.println("Oops ... unable to initialize the LSM9DS0. Check your wiring!");
+    while (1);
+  }
 
   setupSensor();
   calibrateSensors();
@@ -25,7 +31,7 @@ void setup() {
   PCICR |= (1 << PCIE2);     // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port K.
   PCMSK2 |= (1 << PCINT18);  // set PCINT18 (digital input A10)to trigger an interrupt on state change
 
-  DDRA |= B00111111;         //Configure digital pin 22 - 29 as output.
+  DDRA |= B00111111;         //Configure digital pin 22 - 27 as output.
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +40,9 @@ void setup() {
 void loop() {
   Serial.println("Roll angle: " + (String) angle_roll);
   Serial.println("Pitch angle: " + (String) angle_pitch);
-  
+
+  delay(45);
+
   // Serial.println(receiver_input[3]);
   // PORTA |= B00111111;
   // delayMicroseconds(receiver_input[3]);
@@ -46,9 +54,9 @@ void loop() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void calculate_pitch_roll(){
-  gyro_roll_input = (gyro_roll_input * 0.7) + (gyro_roll * 0.3);    //Gyro pid input is deg/sec.
-  gyro_pitch_input = (gyro_pitch_input * 0.7) + (gyro_pitch * 0.3); //Gyro pid input is deg/sec.
-  gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
+  // gyro_roll_input = (gyro_roll_input * 0.7) + (gyro_roll * 0.3);    //Gyro pid input is deg/sec.
+  // gyro_pitch_input = (gyro_pitch_input * 0.7) + (gyro_pitch * 0.3); //Gyro pid input is deg/sec.
+  // gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
 
   sensors_event_t accel1, mag1, gyro1, temp1;
   lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
@@ -57,8 +65,8 @@ void calculate_pitch_roll(){
   gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
   gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
 
-  angle_pitch += gyro_pitch * 0.015;
-  angle_roll += gyro_roll * 0.015;
+  angle_pitch += gyro_pitch * 0.05;
+  angle_roll += gyro_roll * 0.05;
 
   float constant = 0.02 * (3.142 / 180);
   angle_pitch -= angle_roll * sin(gyro_yaw * constant);
