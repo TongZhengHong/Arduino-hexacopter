@@ -114,7 +114,6 @@ void setup(){
 
   Serial.println("Setting up sensors...");
   setupSensor();
-
   calibrateSensors();
 
   Serial.println("Waiting for receiver connection...");
@@ -147,7 +146,6 @@ void loop(){
   convert_transmitter_values();
 
   calculate_pitch_roll();
-  //delay(20);
 
   check_start_stop();
 
