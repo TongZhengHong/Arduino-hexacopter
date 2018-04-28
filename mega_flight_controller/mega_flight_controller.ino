@@ -1,22 +1,26 @@
-///////////////////////////////////////////////////////////////////////////////////////////////
-//Convention:
-//  Channel 1: ROLL
-//  Channel 2: PITCH
-//  Channel 3: THROTTLE
-//  Channel 4: YAW
-///////////////////////////////////////////////////////////////////////////////////////////////
+//* /////////////////////////////////////////////////////////////////////////////////////////////
+//*Convention:
+//*  Channel 1: ROLL
+//*  Channel 2: PITCH
+//*  Channel 3: THROTTLE
+//*  Channel 4: YAW
+//* /////////////////////////////////////////////////////////////////////////////////////////////
 
-//#define DEBUG_TRANSMITTER
-//#define DEBUG_SENSOR
+//*#define DEBUG_TRANSMITTER
+//*#define DEBUG_SENSOR
 #define DEBUG_START_STOP
-//#define DEBUG_PID_OFFSETS
-//#define DEBUG_PID
+//*#define DEBUG_PID_OFFSETS
+//*#define DEBUG_PID
 #define DEBUG_ESC_OUTPUT
-//#define DEBUG_BATTERY_VOLTAGE
+//*#define DEBUG_BATTERY_VOLTAGE
 
-//TODO: Test gyroscope and accelerometer individually
+//*#define DEBUG_CHANNELS
+//*#define DEBUG_LOOP_TIMER
+//*#define DEBUG_GYRO_VEL
+
 //TODO: Check PID values are appropriate
 //TODO: Ensure that motors can spin at different values
+//TODO: Battery voltage integration
 
 #include <Wire.h>
 #include <EEPROM.h>
@@ -25,7 +29,7 @@
 
 Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0();
 
-///////////////////////////////////////////////////////////////////////////////////////////////
+//* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 1.3;  //Gain setting for the roll P-controller
 float pid_i_gain_roll = 0.04; //Gain setting for the roll I-controller
 float pid_d_gain_roll = 18.0; //Gain setting for the roll D-controller
@@ -40,12 +44,13 @@ float pid_p_gain_yaw = 4.0;  //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.02; //Gain setting for the pitch I-controller. //0.02
 float pid_d_gain_yaw = 0.0;  //Gain setting for the pitch D-controller.
 int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
-///////////////////////////////////////////////////////////////////////////////////////////////
+//* /////////////////////////////////////////////////////////////////////////////////////////////
 
 //Misc. variables
 byte eeprom_data[27];
 float battery_voltage;
 int start = 0;
+float main_loop_timer; 
 
 //Sensor variables
 float angle_pitch, angle_roll;
@@ -116,7 +121,8 @@ void setup(){
   setupSensor();
   calibrateSensors();
 
-  Serial.println("Waiting for receiver connection...");
+  Serial.println("Waiting for receiver...");
+  Serial.println("Please turn on your transmitter and ensure that the throttle is in the lowest position.");
   //Wait until the receiver is active and the throtle is set to the lower position.
   while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
     receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
@@ -137,12 +143,22 @@ void setup(){
 
   digitalWrite(13, LOW);
   Serial.println("SETUP DONE!");
+
+  for(int i = 5; i > 0; i--){
+    Serial.print(i);
+    Serial.print(". ");
+    delay(1000);
+  }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
+//* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 void loop(){
+  #ifdef DEBUG_LOOP_TIMER
+    main_loop_timer = micros();
+  #endif
+
   convert_transmitter_values();
 
   calculate_pitch_roll();
@@ -155,34 +171,43 @@ void loop(){
 
   calculate_esc_output();
 
-  delay(20);
-
-  return;
-
   set_escs();
 
   check_battery_voltage();
+
+  #ifdef DEBUG_LOOP_TIMER
+    main_loop_timer = micros() - main_loop_timer;
+    Serial.println(main_loop_timer);
+  #endif
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
+//* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
 void calculate_pitch_roll(){
   gyro_roll_input = (gyro_roll_input * 0.7) + (gyro_roll * 0.3);    //Gyro pid input is deg/sec.
   gyro_pitch_input = (gyro_pitch_input * 0.7) + (gyro_pitch * 0.3); //Gyro pid input is deg/sec.
   gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
 
+  #ifdef DEBUG_GYRO_VEL
+    Serial.println("Gyro angular velocity:");
+    Serial.print("Roll: " + (String) gyro_roll_input);
+    Serial.print(" Pitch: " + (String)gyro_pitch_input);
+    Serial.print(" Yaw: " + (String) gyro_yaw_input);
+    Serial.println("\n");
+  #endif
+
   sensors_event_t accel1, mag1, gyro1, temp1;
   lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
 
-  gyro_pitch = (double)gyro1.gyro.x - gyro_cal[1];
-  gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
-  gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
+  gyro_pitch = (double) gyro1.gyro.x - gyro_cal[1];
+  gyro_roll = (double) gyro1.gyro.y - gyro_cal[2];
+  gyro_yaw = (double) gyro1.gyro.z - gyro_cal[3];
 
-  angle_pitch += gyro_pitch * 0.015;
-  angle_roll += gyro_roll * 0.015;
+  angle_pitch += gyro_pitch * 0.04;
+  angle_roll += gyro_roll * 0.04;
 
-  float constant = 0.02 * (3.142 / 180);
+  float constant = 0.02 * (3.1415 / 180);
   angle_pitch -= angle_roll * sin(gyro_yaw * constant);
   angle_roll += angle_pitch * sin(gyro_yaw * constant);
 
@@ -202,15 +227,15 @@ void calculate_pitch_roll(){
   angle_pitch_acc -= acc_pitch_cal; //Accelerometer calibration value for pitch.
   angle_roll_acc -= acc_roll_cal;   //Accelerometer calibration value for roll.
 
-  angle_pitch = angle_pitch * 0.995 + angle_pitch_acc * 0.005; //Correct the drift of gyro pitch angle with the accl pitch angle.
-  angle_roll = angle_roll * 0.995 + angle_roll_acc * 0.005;    //Correct the drift of gyro roll angle with the accl roll angle.
+  angle_pitch = angle_pitch * 0.98 + angle_pitch_acc * 0.02; //Correct the drift of gyro pitch angle with the accl pitch angle.
+  angle_roll = angle_roll * 0.98 + angle_roll_acc * 0.02;    //Correct the drift of gyro roll angle with the accl roll angle.
 
   pitch_level_adjust = angle_pitch * 15; //Calculate the pitch angle correction
   roll_level_adjust = angle_roll * 15;   //Calculate the roll angle correction
 
   #ifdef DEBUG_SENSOR
-    Serial.println(angle_pitch);
-    Serial.println(angle_roll);
+    Serial.println("Pitch angle: " + (String) angle_pitch);
+    Serial.println("Roll angle: " + (String) angle_roll);
     Serial.println("");
   #endif
 }
@@ -305,7 +330,7 @@ void set_pid_offsets(){
 }
 
 void calculate_pid(){
-  ////////////////////////////////////////// Roll calculation //////////////////////////////////////////
+  //* //////////////////////////////////////// Roll calculation //////////////////////////////////////////
   pid_error_temp = gyro_roll_input - pid_roll_setpoint;
   pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
   if (pid_i_mem_roll > pid_max_roll)
@@ -321,7 +346,7 @@ void calculate_pid(){
 
   pid_last_roll_d_error = pid_error_temp;
 
-  ////////////////////////////////////////// Pitch calculation //////////////////////////////////////////
+  //* //////////////////////////////////////// Pitch calculation //////////////////////////////////////////
   pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
   pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
   if (pid_i_mem_pitch > pid_max_pitch)
@@ -337,7 +362,7 @@ void calculate_pid(){
 
   pid_last_pitch_d_error = pid_error_temp;
 
-  ////////////////////////////////////////// Yaw calculation ///////////////////////////////////////////
+  //* //////////////////////////////////////// Yaw calculation ///////////////////////////////////////////
   pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
   pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
   if (pid_i_mem_yaw > pid_max_yaw)
@@ -367,23 +392,22 @@ void calculate_esc_output(){
   throttle = receiver_input_channel_3; //We need the throttle signal as a base signal.
 
   if (start == 2)  { //The motors are started.
-    if (throttle > 1850)
-      throttle = 1850;                                                      //We need some room to keep full control at full throttle.
+    if (throttle > 1850) throttle = 1850; //We need some room to keep full control at full throttle.
     esc_1 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (CW)
-    esc_2 = throttle + pid_output_roll - pid_output_yaw;                    //Calculate the pulse for esc 2 (CCW)
+    esc_2 = throttle /*==============*/ + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 2 (CCW)
     esc_3 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (CW)
     esc_4 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 4 (CCW)
-    esc_5 = throttle - pid_output_roll + pid_output_yaw;                    //Calculate the pulse for esc 5 (CW)
+    esc_5 = throttle /*==============*/ - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 5 (CW)
     esc_6 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 6 (CCW)
 
-    if (battery_voltage < 830 && battery_voltage > 600)    {                                                           //Is the battery connected?
+    /*if (battery_voltage < 830 && battery_voltage > 600)    {                                                           //Is the battery connected?
       esc_1 += esc_1 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-1 pulse for voltage drop.
       esc_2 += esc_2 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-2 pulse for voltage drop.
       esc_3 += esc_3 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-3 pulse for voltage drop.
       esc_4 += esc_4 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-4 pulse for voltage drop.
       esc_5 += esc_5 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-5 pulse for voltage drop.
       esc_6 += esc_6 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-6 pulse for voltage drop.
-    }
+    }*/
 
     if (esc_1 < 1100)      esc_1 = 1100; //Keep the motors running.
     if (esc_2 < 1100)      esc_2 = 1100; //Keep the motors running.
@@ -436,18 +460,12 @@ void set_escs(){
 
   while (PORTA >= 1)  {                 //Stay in this loop until output 22 - 27 are LOW.
     esc_loop_timer = micros(); //Read the current time.
-    if (timer_channel_1 <= esc_loop_timer)
-      PORTA &= B11111110; //Set digital output 22 to low if the time is expired.
-    if (timer_channel_2 <= esc_loop_timer)
-      PORTA &= B11111101; //Set digital output 23 to low if the time is expired.
-    if (timer_channel_3 <= esc_loop_timer)
-      PORTA &= B11111011; //Set digital output 24 to low if the time is expired.
-    if (timer_channel_4 <= esc_loop_timer)
-      PORTA &= B11110111; //Set digital output 25 to low if the time is expired.
-    if (timer_channel_5 <= esc_loop_timer)
-      PORTA &= B11101111; //Set digital output 26 to low if the time is expired.
-    if (timer_channel_6 <= esc_loop_timer)
-      PORTA &= B11011111; //Set digital output 27 to low if the time is expired.
+    if (timer_channel_1 <= esc_loop_timer) PORTA &= B11111110; //Set digital output 22 to low if the time is expired.
+    if (timer_channel_2 <= esc_loop_timer) PORTA &= B11111101; //Set digital output 23 to low if the time is expired.
+    if (timer_channel_3 <= esc_loop_timer) PORTA &= B11111011; //Set digital output 24 to low if the time is expired.
+    if (timer_channel_4 <= esc_loop_timer) PORTA &= B11110111; //Set digital output 25 to low if the time is expired.
+    if (timer_channel_5 <= esc_loop_timer) PORTA &= B11101111; //Set digital output 26 to low if the time is expired.
+    if (timer_channel_6 <= esc_loop_timer) PORTA &= B11011111; //Set digital output 27 to low if the time is expired.
   }
 }
 
@@ -501,6 +519,17 @@ void convert_transmitter_values(){
     }
     Serial.println("");
   #endif
+
+  #ifdef DEBUG_CHANNELS
+    Serial.print(receiver_input_channel_1);
+    Serial.print(", ");
+    Serial.print(receiver_input_channel_2);
+    Serial.print(", ");
+    Serial.print(receiver_input_channel_3);
+    Serial.print(", ");
+    Serial.print(receiver_input_channel_4);
+    Serial.println("");
+  #endif
 }
 
 void setupSensor(){
@@ -521,7 +550,7 @@ void setupSensor(){
 }
 
 void calibrateSensors(){
-  ////////////////////////////////////////// Gyroscope calibration //////////////////////////////////////////
+  //* //////////////////////////////////////// Gyroscope calibration //////////////////////////////////////////
   for (int i = 0; i < 2000; i++)  {
     sensors_event_t accel, mag, gyro, temp;
     lsm.getEvent(&accel, &mag, &gyro, &temp);
@@ -538,7 +567,7 @@ void calibrateSensors(){
   Serial.println("Gyroscope calibration done!");
   for (int i = 0; i < 3; i++) Serial.println(gyro_cal[i]);
 
-  ////////////////////////////////////////// Accelometer calibration ////////////////////////////////////////
+  //* //////////////////////////////////////// Accelometer calibration ////////////////////////////////////////
   for (int i = 0; i < 2000; i++)  {
     sensors_event_t accel1, mag1, gyro1, temp1;
     lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
@@ -587,7 +616,7 @@ void calibrateSensors(){
 
 ISR(PCINT2_vect){
   current_time = micros();
-  //============================================= Channel 1 =============================================
+  //*============================================= Channel 1 =============================================
   if (PINK & B10000000)  { //Is input A15 high?
     if (last_channel_1 == 0)    {                         //Input A8 changed from 0 to 1
       last_channel_1 = 1;     //Remember current input state
@@ -599,7 +628,7 @@ ISR(PCINT2_vect){
     receiver_input[1] = current_time - timer_1; //Channel 1 is current_time - timer_1
   }
 
-  //============================================= Channel 2 =============================================
+  //*============================================= Channel 2 =============================================
   if (PINK & B01000000)  { //Is input A14 high?
     if (last_channel_2 == 0)    {                         //Input A9 changed from 0 to 1
       last_channel_2 = 1;     //Remember current input state
@@ -611,7 +640,7 @@ ISR(PCINT2_vect){
     receiver_input[2] = current_time - timer_2; //Channel 2 is current_time - timer_2
   }
 
-  //============================================= Channel 3 =============================================
+  //*============================================= Channel 3 =============================================
   if (PINK & B00100000)  { //Is input A13 high?
     if (last_channel_3 == 0)    {                         //Input A10 changed from 0 to 1
       last_channel_3 = 1;     //Remember current input state
@@ -623,7 +652,7 @@ ISR(PCINT2_vect){
     receiver_input[3] = current_time - timer_3; //Channel 3 is current_time - timer_3
   }
 
-  //============================================= Channel 4 =============================================
+  //*============================================= Channel 4 =============================================
   if (PINK & B00010000)  { //Is input A12 high?
     if (last_channel_4 == 0)    {                         //Input A11 changed from 0 to 1
       last_channel_4 = 1;     //Remember current input state
@@ -635,7 +664,7 @@ ISR(PCINT2_vect){
     receiver_input[4] = current_time - timer_4; //Channel 4 is current_time - timer_4
   }
 
-  //============================================= Channel 5 =============================================
+  //*============================================= Channel 5 =============================================
   if (PINK & B00001000)  { //Is input A11 high?
     if (last_channel_5 == 0)    {                         //Input A12 changed from 0 to 1
       last_channel_5 = 1;     //Remember current input state
@@ -647,7 +676,7 @@ ISR(PCINT2_vect){
     receiver_input[5] = current_time - timer_5; //Channel 5 is current_time - timer_5
   }
 
-  //============================================= Channel 6 =============================================
+  //*============================================= Channel 6 =============================================
   if (PINK & B00000100)  { //Is input A10 high?
     if (last_channel_6 == 0)    {                         //Input A13 changed from 0 to 1
       last_channel_6 = 1;     //Remember current input state
@@ -659,7 +688,7 @@ ISR(PCINT2_vect){
     receiver_input[6] = current_time - timer_6; //Channel 6 is current_time - timer_6
   }
 
-  //============================================= Channel 7 =============================================
+  //*============================================= Channel 7 =============================================
   if (PINK & B00000010)  { //Is input A9 high?
     if (last_channel_7 == 0)    {                         //Input A14 changed from 0 to 1
       last_channel_7 = 1;     //Remember current input state
@@ -671,7 +700,7 @@ ISR(PCINT2_vect){
     receiver_input[7] = current_time - timer_7; //Channel 7 is current_time - timer_7
   }
 
-  //============================================= Channel 8 =============================================
+  //*============================================= Channel 8 =============================================
   if (PINK & B00000001)  { //Is input A8 high?
     if (last_channel_8 == 0)    {                         //Input A15 changed from 0 to 1
       last_channel_8 = 1;     //Remember current input state

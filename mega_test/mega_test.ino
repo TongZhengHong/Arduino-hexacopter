@@ -2,6 +2,8 @@
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 
+Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0();
+
 //Transmitter variables
 byte last_channel_3;
 unsigned long timer_3, current_time;
@@ -38,10 +40,12 @@ void setup() {
 //////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
+  calculate_pitch_roll();
   Serial.println("Roll angle: " + (String) angle_roll);
   Serial.println("Pitch angle: " + (String) angle_pitch);
+  Serial.println();
 
-  delay(45);
+  delay(100);
 
   // Serial.println(receiver_input[3]);
   // PORTA |= B00111111;
@@ -65,8 +69,8 @@ void calculate_pitch_roll(){
   gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
   gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
 
-  angle_pitch += gyro_pitch * 0.05;
-  angle_roll += gyro_roll * 0.05;
+  angle_pitch += gyro_pitch * 0.1;
+  angle_roll += gyro_roll * 0.1;
 
   float constant = 0.02 * (3.142 / 180);
   angle_pitch -= angle_roll * sin(gyro_yaw * constant);
@@ -88,8 +92,8 @@ void calculate_pitch_roll(){
   angle_pitch_acc -= acc_pitch_cal; //Accelerometer calibration value for pitch.
   angle_roll_acc -= acc_roll_cal;   //Accelerometer calibration value for roll.
 
-  angle_pitch = angle_pitch * 0.995 + angle_pitch_acc * 0.005; //Correct the drift of gyro pitch angle with the accl pitch angle.
-  angle_roll = angle_roll * 0.995 + angle_roll_acc * 0.005;    //Correct the drift of gyro roll angle with the accl roll angle.
+  angle_pitch = angle_pitch * 0.98 + angle_pitch_acc * 0.02; //Correct the drift of gyro pitch angle with the accl pitch angle.
+  angle_roll = angle_roll * 0.98 + angle_roll_acc * 0.02;    //Correct the drift of gyro roll angle with the accl roll angle.
 }
 
 ISR(PCINT2_vect) {
