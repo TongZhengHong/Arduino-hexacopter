@@ -7,11 +7,11 @@
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
 //*#define DEBUG_TRANSMITTER
-//*#define DEBUG_SENSOR
-#define DEBUG_START_STOP
+#define DEBUG_SENSOR
+//*#define DEBUG_START_STOP
 //*#define DEBUG_PID_OFFSETS
 //*#define DEBUG_PID
-#define DEBUG_ESC_OUTPUT
+//*#define DEBUG_ESC_OUTPUT
 //*#define DEBUG_BATTERY_VOLTAGE
 
 //*#define DEBUG_CHANNELS
@@ -30,9 +30,9 @@
 Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0();
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
-float pid_p_gain_roll = 1.3;  //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.04; //Gain setting for the roll I-controller
-float pid_d_gain_roll = 18.0; //Gain setting for the roll D-controller
+float pid_p_gain_roll = 0.2;  //Gain setting for the roll P-controller
+float pid_i_gain_roll = 0.0; //Gain setting for the roll I-controller
+float pid_d_gain_roll = 0; //Gain setting for the roll D-controller
 int pid_max_roll = 400;       //Maximum output of the PID-controller (+/-)
 
 float pid_p_gain_pitch = pid_p_gain_roll; //Gain setting for the pitch P-controller.
@@ -40,8 +40,8 @@ float pid_i_gain_pitch = pid_i_gain_roll; //Gain setting for the pitch I-control
 float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-controller.
 int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
 
-float pid_p_gain_yaw = 4.0;  //Gain setting for the pitch P-controller. //4.0
-float pid_i_gain_yaw = 0.02; //Gain setting for the pitch I-controller. //0.02
+float pid_p_gain_yaw = 0.0;  //Gain setting for the pitch P-controller. //4.0
+float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
 float pid_d_gain_yaw = 0.0;  //Gain setting for the pitch D-controller.
 int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 //* /////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,6 +97,8 @@ void setup(){
   receiver_input_channel_3 = 0;
   receiver_input_channel_4 = 0;
 
+  Serial.println("Initialising pins...");
+
   PCICR |= (1 << PCIE2); // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port K.
 
   PCMSK2 |= (1 << PCINT16); // set PCINT16 (digital input A8) to trigger an interrupt on state change
@@ -110,7 +112,6 @@ void setup(){
   PCMSK2 |= (1 << PCINT23); // set PCINT23 (digital input A15)to trigger an interrupt on state change
 
   DDRA |= B00111111; // Set digital pins 22 - 27 to OUTPUT
-  Serial.println("Initialise pins");
 
   if (!lsm.begin())  {
     Serial.println("Oops ... unable to initialize the LSM9DS0. Check your wiring!");
@@ -122,7 +123,7 @@ void setup(){
   calibrateSensors();
 
   Serial.println("Waiting for receiver...");
-  Serial.println("Please turn on your transmitter and ensure that the throttle is in the lowest position.");
+  Serial.println("Please turn on your transmitter and ensure that the throttle is in the LOWEST position.");
   //Wait until the receiver is active and the throtle is set to the lower position.
   while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
     receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
@@ -146,7 +147,7 @@ void setup(){
 
   for(int i = 5; i > 0; i--){
     Serial.print(i);
-    Serial.print(". ");
+    Serial.print(" ");
     delay(1000);
   }
 }
@@ -193,8 +194,7 @@ void calculate_pitch_roll(){
     Serial.println("Gyro angular velocity:");
     Serial.print("Roll: " + (String) gyro_roll_input);
     Serial.print(" Pitch: " + (String)gyro_pitch_input);
-    Serial.print(" Yaw: " + (String) gyro_yaw_input);
-    Serial.println("\n");
+    Serial.print(" Yaw: " + (String) gyro_yaw_input + "\n\n");
   #endif
 
   sensors_event_t accel1, mag1, gyro1, temp1;
@@ -204,8 +204,8 @@ void calculate_pitch_roll(){
   gyro_roll = (double) gyro1.gyro.y - gyro_cal[2];
   gyro_yaw = (double) gyro1.gyro.z - gyro_cal[3];
 
-  angle_pitch += gyro_pitch * 0.04;
-  angle_roll += gyro_roll * 0.04;
+  angle_pitch += gyro_pitch * 0.05;
+  angle_roll += gyro_roll * 0.05;
 
   float constant = 0.02 * (3.1415 / 180);
   angle_pitch -= angle_roll * sin(gyro_yaw * constant);
@@ -393,12 +393,12 @@ void calculate_esc_output(){
 
   if (start == 2)  { //The motors are started.
     if (throttle > 1850) throttle = 1850; //We need some room to keep full control at full throttle.
-    esc_1 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (CW)
+    esc_1 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (CW)
     esc_2 = throttle /*==============*/ + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 2 (CCW)
-    esc_3 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (CW)
-    esc_4 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 4 (CCW)
+    esc_3 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (CW)
+    esc_4 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 4 (CCW)
     esc_5 = throttle /*==============*/ - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 5 (CW)
-    esc_6 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 6 (CCW)
+    esc_6 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 6 (CCW)
 
     /*if (battery_voltage < 830 && battery_voltage > 600)    {                                                           //Is the battery connected?
       esc_1 += esc_1 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-1 pulse for voltage drop.
@@ -473,8 +473,9 @@ void check_battery_voltage(){
   float constant = (5000 / 1023.0) * 0.08;
   battery_voltage = battery_voltage * 0.92 + analogRead(A0) * constant + 2;
 
-  if (battery_voltage < 680 && battery_voltage > 600)
-    digitalWrite(13, HIGH);
+  if (battery_voltage < 680 && battery_voltage > 600){
+    //digitalWrite(13, HIGH);
+  }
   
   #ifdef DEBUG_BATTERY_VOLTAGE
     Serial.println("Battery left: " + (String) battery_voltage);
