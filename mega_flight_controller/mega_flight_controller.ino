@@ -18,8 +18,8 @@
 //*#define DEBUG_LOOP_TIMER
 //*#define DEBUG_GYRO_VEL
 
-//TODO: Check PID values are appropriate
-//TODO: Ensure that motors can spin at different values
+//TODO: Check pitch roll angles during flight
+//TODO: If pitch roll angles affected, need to balance props first before next test
 //TODO: Battery voltage integration
 
 #include <Wire.h>
