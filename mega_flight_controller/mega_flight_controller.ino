@@ -130,7 +130,11 @@ void setup(){
     receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
     start++;                                                //While waiting increment start whith every loop.
 
+    PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
+    delayMicroseconds(1000);
+    PORTA &= B11000000;
     delay(3);                                               //Wait 3 milliseconds before the next loop.
+
     if (start == 125) {
       digitalWrite(13, !digitalRead(13));                   //Change the led status.
       start = 0;                                            //Start again at 0.
@@ -555,9 +559,14 @@ void calibrateSensors(){
     sensors_event_t accel, mag, gyro, temp;
     lsm.getEvent(&accel, &mag, &gyro, &temp);
 
-    gyro_cal[1] += (float)gyro.gyro.x;
-    gyro_cal[2] += (float)gyro.gyro.y;
-    gyro_cal[3] += (float)gyro.gyro.z;
+    gyro_cal[1] += (float) gyro.gyro.x;
+    gyro_cal[2] += (float) gyro.gyro.y;
+    gyro_cal[3] += (float) gyro.gyro.z;
+
+    PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
+    delayMicroseconds(1000);
+    PORTA &= B11000000;
+    delay(3);                                               //Wait 3 milliseconds before the next loop.
   }
 
   gyro_cal[1] /= 2000;
@@ -576,8 +585,8 @@ void calibrateSensors(){
     gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
     gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
 
-    angle_pitch += gyro_pitch * 0.005;
-    angle_roll += gyro_roll * 0.005;
+    angle_pitch += gyro_pitch * 0.04;
+    angle_roll += gyro_roll * 0.04;
 
     float constant = 0.02 * (3.142 / 180);
     angle_pitch -= angle_roll * sin(gyro_yaw * constant);
@@ -601,6 +610,11 @@ void calibrateSensors(){
 
     acc_pitch_cal += angle_pitch;
     acc_roll_cal += angle_roll;
+
+    PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
+    delayMicroseconds(1000);
+    PORTA &= B11000000;
+    delay(3);                                               //Wait 3 milliseconds before the next loop.
   }
 
   acc_pitch_cal /= 2000;
