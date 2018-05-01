@@ -74,7 +74,7 @@ void setup(){
 
 void loop(){
   if(Serial.available() > 0){
-
+    
   }
     receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
     receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
