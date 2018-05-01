@@ -130,13 +130,13 @@ void setup(){
     receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
     start++;                                                //While waiting increment start whith every loop.
 
-    delay(3); //Wait 3 milliseconds before the next loop.
-    if (start == 125)    {
-      digitalWrite(13, !digitalRead(13)); //Change the led status.
-      start = 0;                          //Start again at 0.
+    delay(3);                                               //Wait 3 milliseconds before the next loop.
+    if (start == 125) {
+      digitalWrite(13, !digitalRead(13));                   //Change the led status.
+      start = 0;                                            //Start again at 0.
     }
   }
-  start = 0; //Set start back to 0.
+  start = 0;                                                //Set start back to 0.
 
   //Battery voltage calculation
   battery_voltage = analogRead(A0) * (5000 / 1023.0) + 20;
@@ -146,8 +146,7 @@ void setup(){
   Serial.println("SETUP DONE!");
 
   for(int i = 5; i > 0; i--){
-    Serial.print(i);
-    Serial.print(" ");
+    Serial.print(str(i) + " ");
     delay(1000);
   }
 }
