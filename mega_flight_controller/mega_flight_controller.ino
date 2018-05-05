@@ -150,7 +150,7 @@ void setup(){
   Serial.println("SETUP DONE!");
 
   for(int i = 5; i > 0; i--){
-    Serial.print(str(i) + " ");
+    Serial.print((String) i + " ");
     delay(1000);
   }
 }
