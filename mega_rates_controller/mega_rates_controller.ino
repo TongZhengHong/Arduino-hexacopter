@@ -6,13 +6,11 @@
 //*  Channel 4: YAW
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
-//!#define DEBUGGING_MAIN
-
 //*#define DEBUG_TRANSMITTER
-//*#define DEBUG_SENSOR
+#define DEBUG_SENSOR
 //*#define DEBUG_START_STOP
-#define DEBUG_PID_OFFSETS
-#define DEBUG_PID
+//*#define DEBUG_PID_OFFSETS
+//*#define DEBUG_PID
 //*#define DEBUG_ESC_OUTPUT
 //*#define DEBUG_BATTERY_VOLTAGE
 
@@ -20,8 +18,8 @@
 //*#define DEBUG_LOOP_TIMER
 //*#define DEBUG_GYRO_VEL
 
-//TODO: Ensure stable angles during flight
-//TODO: Check PID outputs --> Test flight for I controller (Make sure max output is correct)
+//TODO: Check pitch roll angles during flight
+//TODO: If pitch roll angles affected, need to balance props first before next test
 //TODO: Battery voltage integration
 
 #include <Wire.h>
@@ -32,17 +30,15 @@
 Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0();
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
-float pid_p_gain_roll = 1.2;  //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.0;  //Gain setting for the roll I-controller
-float pid_d_gain_roll = 0;    //Gain setting for the roll D-controller
+float pid_p_gain_roll = 0.2;  //Gain setting for the roll P-controller
+float pid_i_gain_roll = 0.0; //Gain setting for the roll I-controller
+float pid_d_gain_roll = 0; //Gain setting for the roll D-controller
 int pid_max_roll = 400;       //Maximum output of the PID-controller (+/-)
-int pid_max_i_roll = 200;     //Eliminate I controller windup
 
 float pid_p_gain_pitch = pid_p_gain_roll; //Gain setting for the pitch P-controller.
 float pid_i_gain_pitch = pid_i_gain_roll; //Gain setting for the pitch I-controller.
 float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-controller.
 int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
-int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
 
 float pid_p_gain_yaw = 0.0;  //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
@@ -124,19 +120,7 @@ void setup(){
 
   Serial.println("Setting up sensors...");
   setupSensor();
-
-  #ifndef DEBUGGING_MAIN
-    calibrateSensors();
-  #endif
-
-  #ifdef DEBUGGING_MAIN
-    gyro_cal[1] = 0.00;
-    gyro_cal[2] = -2.00;
-    gyro_cal[3] = 0.45;
-
-    acc_pitch_cal = 1.95;
-    acc_roll_cal = 6.95;
-  #endif
+  calibrateSensors();
 
   Serial.println("Waiting for receiver...");
   Serial.println("Please turn on your transmitter and ensure that the throttle is in the LOWEST position.");
@@ -205,7 +189,16 @@ void loop(){
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
 void calculate_pitch_roll(){
+  gyro_roll_input = (gyro_roll_input * 0.7) + (gyro_roll * 0.3);    //Gyro pid input is deg/sec.
+  gyro_pitch_input = (gyro_pitch_input * 0.7) + (gyro_pitch * 0.3); //Gyro pid input is deg/sec.
   gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
+
+  #ifdef DEBUG_GYRO_VEL
+    Serial.println("Gyro angular velocity:");
+    Serial.print("Roll: " + (String) gyro_roll_input);
+    Serial.print(" Pitch: " + (String)gyro_pitch_input);
+    Serial.print(" Yaw: " + (String) gyro_yaw_input + "\n\n");
+  #endif
 
   sensors_event_t accel1, mag1, gyro1, temp1;
   lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
@@ -240,6 +233,9 @@ void calculate_pitch_roll(){
   angle_pitch = angle_pitch * 0.98 + angle_pitch_acc * 0.02; //Correct the drift of gyro pitch angle with the accl pitch angle.
   angle_roll = angle_roll * 0.98 + angle_roll_acc * 0.02;    //Correct the drift of gyro roll angle with the accl roll angle.
 
+  pitch_level_adjust = angle_pitch * 15; //Calculate the pitch angle correction
+  roll_level_adjust = angle_roll * 15;   //Calculate the roll angle correction
+
   #ifdef DEBUG_SENSOR
     Serial.println("Pitch angle: " + (String) angle_pitch);
     Serial.println("Roll angle: " + (String) angle_roll);
@@ -254,10 +250,10 @@ void check_start_stop(){
 
   //For starting the motors: throttle low and yaw left (step 1).
   if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
-    if (start == 0) {
+    if (start == 0)    {
       start = 1;
     }
-    else if (start == 2) { //Stop motors --> check if already started
+    else if (start == 2)    { //Stop motors --> check if already started
       start = 3;
     }
   }
@@ -287,33 +283,36 @@ void check_start_stop(){
 }
 
 void set_pid_offsets(){
-//* ///////////////////////////////////// Roll setpoints /////////////////////////////////////////////////
+  //The PID set point in degrees per second is determined by the roll receiver input.
+  //In the case of deviding by 3 the max roll rate is aprox 164 degrees per second ( (500-8)/3 = 164d/s ).
   pid_roll_setpoint = 0;
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  {
-    if (receiver_input_channel_1 > 1504)
-      pid_roll_setpoint = receiver_input_channel_1 - 1504;
-    else if (receiver_input_channel_1 < 1496)
-      pid_roll_setpoint = receiver_input_channel_1 - 1496;
+    if (receiver_input_channel_1 > 1508)
+      pid_roll_setpoint = receiver_input_channel_1 - 1508;
+    else if (receiver_input_channel_1 < 1492)
+      pid_roll_setpoint = receiver_input_channel_1 - 1492;
 
-    pid_roll_setpoint = map(pid_roll_setpoint, 0, 496, 0, 50);    //! Output: 0 to 40 degrees of roll 
+    pid_roll_setpoint -= roll_level_adjust; //Subtract the angle correction from the standardized receiver roll input value.
+    pid_roll_setpoint /= 3.0;               //Divide the setpoint for the PID roll controller by 3 to get angles in degrees.
   }
 
-//* ///////////////////////////////////// Pitch setpoints /////////////////////////////////////////////////
+  //The PID set point in degrees per second is determined by the pitch receiver input.
+  //In the case of deviding by 3 the max pitch rate is aprox 164 degrees per second ( (500-8)/3 = 164d/s ).
   pid_pitch_setpoint = 0;
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  {
-    if (receiver_input_channel_2 > 1504)
-      pid_pitch_setpoint = receiver_input_channel_2 - 1504;
-    else if (receiver_input_channel_2 < 1496)
-      pid_pitch_setpoint = receiver_input_channel_2 - 1496;
+    if (receiver_input_channel_2 > 1508)
+      pid_pitch_setpoint = receiver_input_channel_2 - 1508;
+    else if (receiver_input_channel_2 < 1492)
+      pid_pitch_setpoint = receiver_input_channel_2 - 1492;
 
-    pid_pitch_setpoint = map(pid_pitch_setpoint, 0, 496, 0, 50);  //! Output: 0 to 40 degrees of pitch 
+    pid_pitch_setpoint -= pitch_level_adjust; //Subtract the angle correction from the standardized receiver pitch input value.
+    pid_pitch_setpoint /= 3.0;                //Divide the setpoint for the PID pitch controller by 3 to get angles in degrees.
   }
 
-//* ///////////////////////////////////// Yaw setpoints /////////////////////////////////////////////////
   //The PID set point in degrees per second is determined by the yaw receiver input.
-  //In the case of deviding by 3 the max yaw rate is aprox 164 degrees per second ((500-8)/3 = 164d/s).
+  //In the case of deviding by 3 the max yaw rate is aprox 164 degrees per second ( (500-8)/3 = 164d/s ).
   pid_yaw_setpoint = 0;
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  { //Do not yaw when turning off the motors.
@@ -335,16 +334,14 @@ void set_pid_offsets(){
 
 void calculate_pid(){
   //* //////////////////////////////////////// Roll calculation //////////////////////////////////////////
-  pid_error_temp = pid_roll_setpoint - angle_roll;        //? Calculate error //angle_roll - pid_roll_setpoint
+  pid_error_temp = gyro_roll_input - pid_roll_setpoint;
   pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
-
-  if (pid_i_mem_roll > pid_max_i_roll)
-    pid_i_mem_roll = pid_max_i_roll;
-  else if (pid_i_mem_roll < pid_max_i_roll * -1)
-    pid_i_mem_roll = pid_max_i_roll * -1;
+  if (pid_i_mem_roll > pid_max_roll)
+    pid_i_mem_roll = pid_max_roll;
+  else if (pid_i_mem_roll < pid_max_roll * -1)
+    pid_i_mem_roll = pid_max_roll * -1;
 
   pid_output_roll = pid_p_gain_roll * pid_error_temp + pid_i_mem_roll + pid_d_gain_roll * (pid_error_temp - pid_last_roll_d_error);
-
   if (pid_output_roll > pid_max_roll)
     pid_output_roll = pid_max_roll;
   else if (pid_output_roll < pid_max_roll * -1)
@@ -353,13 +350,12 @@ void calculate_pid(){
   pid_last_roll_d_error = pid_error_temp;
 
   //* //////////////////////////////////////// Pitch calculation //////////////////////////////////////////
-  pid_error_temp = pid_pitch_setpoint - angle_pitch;      //? Calculate error //angle_pitch - pid_pitch_setpoint
+  pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
   pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
-
-  if (pid_i_mem_pitch > pid_max_i_pitch)
-    pid_i_mem_pitch = pid_max_i_pitch;
-  else if (pid_i_mem_pitch < pid_max_i_pitch * -1)
-    pid_i_mem_pitch = pid_max_i_pitch * -1;
+  if (pid_i_mem_pitch > pid_max_pitch)
+    pid_i_mem_pitch = pid_max_pitch;
+  else if (pid_i_mem_pitch < pid_max_pitch * -1)
+    pid_i_mem_pitch = pid_max_pitch * -1;
 
   pid_output_pitch = pid_p_gain_pitch * pid_error_temp + pid_i_mem_pitch + pid_d_gain_pitch * (pid_error_temp - pid_last_pitch_d_error);
   if (pid_output_pitch > pid_max_pitch)
@@ -372,7 +368,6 @@ void calculate_pid(){
   //* //////////////////////////////////////// Yaw calculation ///////////////////////////////////////////
   pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
   pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
-
   if (pid_i_mem_yaw > pid_max_yaw)
     pid_i_mem_yaw = pid_max_yaw;
   else if (pid_i_mem_yaw < pid_max_yaw * -1)
@@ -392,7 +387,7 @@ void calculate_pid(){
     Serial.print(pid_output_pitch);
     Serial.print(", ");
     Serial.print(pid_output_yaw);
-    Serial.println("\n");
+    Serial.println("");
   #endif
 }
 
@@ -610,8 +605,8 @@ void calibrateSensors(){
       angle_roll_acc = asin((float)accl_x / acc_total_vector) * -57.296; //Calculate the roll angle.
     }
 
-    angle_pitch = angle_pitch * 0.98 + angle_pitch_acc * 0.02; //Correct the drift of gyro pitch angle with the accl pitch angle.
-    angle_roll = angle_roll * 0.98 + angle_roll_acc * 0.02;    //Correct the drift of gyro roll angle with the accl roll angle.
+    angle_pitch = angle_pitch * 0.99 + angle_pitch_acc * 0.01; //Correct the drift of gyro pitch angle with the accl pitch angle.
+    angle_roll = angle_roll * 0.99 + angle_roll_acc * 0.01;    //Correct the drift of gyro roll angle with the accl roll angle.
 
     acc_pitch_cal += angle_pitch;
     acc_roll_cal += angle_roll;
@@ -629,8 +624,8 @@ void calibrateSensors(){
   angle_roll = 0;
 
   Serial.println("Accelerometer calibration done!");
-  Serial.println("Pitch: " + (String) acc_pitch_cal);
-  Serial.println("Roll: " + (String) acc_roll_cal);
+  Serial.println(acc_pitch_cal);
+  Serial.println(acc_roll_cal);
 }
 
 ISR(PCINT2_vect){
