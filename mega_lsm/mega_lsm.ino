@@ -6,14 +6,19 @@
 //*  Channel 4: YAW
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
+//! #define DEBUGGING_MAIN //!
+
 #define DEBUG_SENSOR
 //*#define DEBUG_TRANSMITTER         //?Raw transmitter values
-//*#define DEBUG_CHANNELS              //?Converted transmitter values
 //*#define DEBUG_START_STOP
 //*#define DEBUG_PID_OFFSETS
 //*#define DEBUG_PID
 //*#define DEBUG_ESC_OUTPUT
 //*#define DEBUG_BATTERY_VOLTAGE
+
+//*#define DEBUG_CHANNELS              //?Converted transmitter values
+//*#define DEBUG_LOOP_TIMER
+//*#define DEBUG_GYRO_VEL
 
 //TODO: Ensure stable angles during flight
 //TODO: Check PID outputs --> Test flight for I controller (Make sure max output is correct)
@@ -21,8 +26,10 @@
 
 #include <Wire.h>
 #include <EEPROM.h>
+#include <Adafruit_LSM9DS0.h>
+#include <Adafruit_Sensor.h>
 
-int imu_address = 104;
+Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0();
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 1.2;  //Gain setting for the roll P-controller
@@ -46,18 +53,17 @@ int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 //Misc. variables
 byte eeprom_data[27];
 float battery_voltage;
-int start, difference, main_loop_timer; 
-bool angle_first_start = true;
+int start = 0;
+float main_loop_timer; 
 
 //Sensor variables
 float angle_pitch, angle_roll;
 float angle_roll_acc, angle_pitch_acc;
 long acc_x, acc_y, acc_z, acc_total_vector;
 float roll_level_adjust, pitch_level_adjust;
-float temperature;
 
 double gyro_pitch, gyro_roll, gyro_yaw;
-double gyro_cal[4];
+double gyro_cal[4], acc_pitch_cal, acc_roll_cal;
 
 //Transmitter variables
 byte last_channel_1, last_channel_2, last_channel_3, last_channel_4, last_channel_5, last_channel_6, last_channel_7, last_channel_8;
@@ -79,7 +85,7 @@ float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_
 
 void setup(){
   Wire.begin();
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(500);
 
   pinMode(13, OUTPUT);
@@ -111,10 +117,26 @@ void setup(){
 
   DDRA |= B00111111; // Set digital pins 22 - 27 to OUTPUT
 
-  Serial.println("Setting up sensors...");
+  if (!lsm.begin())  {
+    Serial.println("Oops ... unable to initialize the LSM9DS0. Check your wiring!");
+    while (1);
+  }
 
+  Serial.println("Setting up sensors...");
   setupSensor();
-  calibrateSensors();
+
+  #ifndef DEBUGGING_MAIN
+    calibrateSensors();
+  #endif
+
+  #ifdef DEBUGGING_MAIN
+    gyro_cal[1] = 0.00;
+    gyro_cal[2] = -2.00;
+    gyro_cal[3] = 0.45;
+
+    acc_pitch_cal = 1.95;
+    acc_roll_cal = 6.95;
+  #endif
 
   Serial.println("Waiting for receiver...");
   Serial.println("Please turn on your transmitter and ensure that the throttle is in the LOWEST position.");
@@ -152,7 +174,6 @@ void setup(){
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 //* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
-
 void loop(){
   convert_transmitter_values();
 
@@ -170,13 +191,9 @@ void loop(){
 
   check_battery_voltage();
 
-  difference = micros() - main_loop_timer;
-  while (difference < 4000){
-    difference = micros() - main_loop_timer;
-  }
-  main_loop_timer = micros();
+  while(micros() - main_loop_timer < 8000);                                      //We wait until 4000us are passed.
+  main_loop_timer = micros();                                                    //Set the timer for the next loop.
 }
-
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 //* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
@@ -184,54 +201,39 @@ void loop(){
 void calculate_pitch_roll(){
   gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
 
-  Wire.beginTransmission(gyro_address);                                   //Start communication with the gyro.
-  Wire.write(0x3B);                                                       //Start reading @ register 3Bh and auto increment with every read.
-  Wire.endTransmission();                                                 //End the transmission.
-  Wire.requestFrom(gyro_address, 14);                                     //Request 14 bytes from the gyro.
+  sensors_event_t accel1, mag1, gyro1, temp1;
+  lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
 
-  while (Wire.available() < 14);                                          //Wait until the 14 bytes are received.
-  acc_x = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
-  acc_y = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
-  acc_z = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
-  temperature = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the temperature variable.
-  gyro_pitch = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_roll = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_yaw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_pitch = (double) gyro1.gyro.x - gyro_cal[1];
+  gyro_roll = (double) gyro1.gyro.y - gyro_cal[2];
+  gyro_yaw = (double) gyro1.gyro.z - gyro_cal[3];
 
-  gyro_pitch -= gyro_cal[1];
-  gyro_roll -= gyro_cal[2];
-  gyro_yaw -= gyro_cal[3];
+  float timing = 0.08;
+  angle_pitch += gyro_pitch * timing;
+  angle_roll += gyro_roll * timing;
 
-  //Gyro calculations 0.000061069 = 1 / (0.004 / 65.5)
-  angle_pitch += gyro_pitch * 0.000061069;
-  angle_roll += gyro_roll * 0.000061069;
-  
-  //Convert 0.000061069 into radians = 0.0000010658
-  angle_pitch -= angle_roll * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the roll angle to the pitch angel.
-  angle_roll += angle_pitch * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the pitch angle to the roll angel.
-  
-  //Accelerometer calculations
-  float acc_total_vector = sqrt((acc_x * acc_x) + (acc_y * acc_y) + (acc_z * acc_z)); //Calculate the total accelerometer vector.
+  float constant = 0.02 * (3.1415 / 180);
+  angle_pitch -= angle_roll * sin(gyro_yaw * constant);
+  angle_roll += angle_pitch * sin(gyro_yaw * constant);
 
-  //180 / PI = 57.296 --> Convert into degrees
-  if (abs(acc_y) < acc_total_vector) {                                      //Prevent the asin function to produce a NaN
-    angle_pitch_acc = asin((float) acc_y / acc_total_vector) * 57.296;       //Calculate the pitch angle.
+  float accl_x = accel1.acceleration.x;
+  float accl_y = accel1.acceleration.y;
+  float accl_z = accel1.acceleration.z;
+
+  long acc_total_vector = sqrt((accl_x * accl_x) + (accl_y * accl_y) + (accl_z * accl_z));
+
+  if (abs(accl_y) < acc_total_vector)  {                               //Prevent the asin function to produce a NaN
+    angle_pitch_acc = asin((float)accl_y / acc_total_vector) * 57.296; //Calculate the pitch angle.
   }
-  if (abs(acc_x) < acc_total_vector) {                                      //Prevent the asin function to produce a NaN
-    angle_roll_acc = asin((float) acc_x / acc_total_vector) * -57.296;       //Calculate the roll angle.
+  if (abs(accl_x) < acc_total_vector)  {                               //Prevent the asin function to produce a NaN
+    angle_roll_acc = asin((float)accl_x / acc_total_vector) * -57.296; //Calculate the roll angle.
   }
 
-  angle_pitch_acc -= 0.80; //Accelerometer calibration value for pitch.
-  angle_roll_acc += 0.40;   //Accelerometer calibration value for roll.
+  angle_pitch_acc -= acc_pitch_cal; //Accelerometer calibration value for pitch.
+  angle_roll_acc -= acc_roll_cal;   //Accelerometer calibration value for roll.
 
-  if (angle_first_start) {
-    angle_pitch = angle_pitch_acc;
-    angle_roll = angle_roll_acc;
-    angle_first_start = false;
-  } else {
-    angle_pitch = angle_pitch * 0.99 + angle_pitch_acc * 0.01;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
-    angle_roll = angle_roll * 0.99 + angle_roll_acc * 0.01;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
-  }
+  angle_pitch = angle_pitch * 0.995 + angle_pitch_acc * 0.005; //Correct the drift of gyro pitch angle with the accl pitch angle.
+  angle_roll = angle_roll * 0.995 + angle_roll_acc * 0.005;    //Correct the drift of gyro roll angle with the accl roll angle.
 
   #ifdef DEBUG_SENSOR
     Serial.println("Pitch angle: " + (String) angle_pitch);
@@ -328,7 +330,7 @@ void set_pid_offsets(){
 
 void calculate_pid(){
   //* //////////////////////////////////////// Roll calculation //////////////////////////////////////////
-  pid_error_temp = angle_roll - pid_roll_setpoint;        //? Calculate error //angle_roll - pid_roll_setpoint
+  pid_error_temp = pid_roll_setpoint - angle_roll;        //? Calculate error //angle_roll - pid_roll_setpoint
   pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
 
   if (pid_i_mem_roll > pid_max_i_roll)
@@ -346,7 +348,7 @@ void calculate_pid(){
   pid_last_roll_d_error = pid_error_temp;
 
   //* //////////////////////////////////////// Pitch calculation //////////////////////////////////////////
-  pid_error_temp = angle_pitch - pid_pitch_setpoint;      //? Calculate error //angle_pitch - pid_pitch_setpoint
+  pid_error_temp = pid_pitch_setpoint - angle_pitch;      //? Calculate error //angle_pitch - pid_pitch_setpoint
   pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
 
   if (pid_i_mem_pitch > pid_max_i_pitch)
@@ -535,50 +537,31 @@ void convert_transmitter_values(){
 }
 
 void setupSensor(){
-  Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search.
-  Wire.write(0x6B);                                                          //We want to write to the PWR_MGMT_1 register (6B hex)
-  Wire.write(0x00);                                                          //Set the register bits as 00000000 to activate the gyro
-  Wire.endTransmission();                                                    //End the transmission with the gyro.
+  //lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_2G);
+  lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_4G);
+  //lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_6G);
+  //lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_8G);
+  //lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_16G);
 
-  Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search.
-  Wire.write(0x1B);                                                          //We want to write to the GYRO_CONFIG register (1B hex)
-  Wire.write(0x08);                                                          //Set the register bits as 00001000 (500dps full scale)
-  Wire.endTransmission();                                                    //End the transmission with the gyro
+  //lsm.setupMag(lsm.LSM9DS0_MAGGAIN_2GAUSS);
+  lsm.setupMag(lsm.LSM9DS0_MAGGAIN_4GAUSS);
+  //lsm.setupMag(lsm.LSM9DS0_MAGGAIN_8GAUSS);
+  //lsm.setupMag(lsm.LSM9DS0_MAGGAIN_12GAUSS);
 
-  Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search.
-  Wire.write(0x1C);                                                          //We want to write to the ACCEL_CONFIG register (1C hex)
-  Wire.write(0x10);                                                          //Set the register bits as 00010000 (+/- 8g full scale range)
-  Wire.endTransmission();                                                    //End the transmission with the gyro
-
-  //Let's perform a random register check to see if the values are written correct
-  Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search
-  Wire.write(0x1B);                                                          //Start reading @ register 0x1B
-  Wire.endTransmission();                                                    //End the transmission
-  Wire.requestFrom(imu_address, 1);                                         //Request 1 bytes from the gyro
-  while (Wire.available() < 1);                                              //Wait until the 6 bytes are received
-  if (Wire.read() != 0x08) {                                                 //Check if the value is 0x08
-    digitalWrite(13, HIGH);                                                  //Turn on the warning led
-    while (1)delay(10);                                                      //Stay in this loop for ever
-  }
-
-  Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search
-  Wire.write(0x1A);                                                          //We want to write to the CONFIG register (1A hex)
-  Wire.write(0x03);                                                          //Set the register bits as 00000011 (Set Digital Low Pass Filter to ~43Hz)
-  Wire.endTransmission();                                                    //End the transmission with the gyro
+  //lsm.setupGyro(lsm.LSM9DS0_GYROSCALE_245DPS);
+  lsm.setupGyro(lsm.LSM9DS0_GYROSCALE_500DPS);
+  //lsm.setupGyro(lsm.LSM9DS0_GYROSCALE_2000DPS);
 }
 
 void calibrateSensors(){
   //* //////////////////////////////////////// Gyroscope calibration //////////////////////////////////////////
-  for (int i = 0; i < 2000; i++) {
-    Wire.beginTransmission(gyro_address);                                   //Start communication with the gyro.
-    Wire.write(0x43);                                                       //Start reading @ register 43h and auto increment with every read.
-    Wire.endTransmission();                                                 //End the transmission.
-    Wire.requestFrom(gyro_address, 6);                                      //Request 14 bytes from the gyro.
+  for (int i = 0; i < 2000; i++)  {
+    sensors_event_t accel, mag, gyro, temp;
+    lsm.getEvent(&accel, &mag, &gyro, &temp);
 
-    while (Wire.available() < 6);                                          //Wait until the 6 bytes are received.
-    gyro_cal[1] = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-    gyro_cal[2] = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-    gyro_cal[3] = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+    gyro_cal[1] += (float) gyro.gyro.x;
+    gyro_cal[2] += (float) gyro.gyro.y;
+    gyro_cal[3] += (float) gyro.gyro.z;
 
     PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
     delayMicroseconds(1000);
@@ -586,12 +569,63 @@ void calibrateSensors(){
     delay(3);                                               //Wait 3 milliseconds before the next loop.
   }
 
-  gyro_cal[1] /= 2000;                                                 //Divide the roll total by 2000.
-  gyro_cal[2] /= 2000;                                                 //Divide the pitch total by 2000.
-  gyro_cal[3] /= 2000;                                                 //Divide the yaw total by 2000.
+  gyro_cal[1] /= 2000;
+  gyro_cal[2] /= 2000;
+  gyro_cal[3] /= 2000;
 
   Serial.println("Gyroscope calibration done!");
   for (int i = 0; i < 3; i++) Serial.println(gyro_cal[i]);
+
+  //* //////////////////////////////////////// Accelometer calibration ////////////////////////////////////////
+  for (int i = 0; i < 2000; i++)  {
+    sensors_event_t accel1, mag1, gyro1, temp1;
+    lsm.getEvent(&accel1, &mag1, &gyro1, &temp1);
+
+    gyro_pitch = (double)gyro1.gyro.x - gyro_cal[1];
+    gyro_roll = (double)gyro1.gyro.y - gyro_cal[2];
+    gyro_yaw = (double)gyro1.gyro.z - gyro_cal[3];
+
+    angle_pitch += gyro_pitch * 0.05;
+    angle_roll += gyro_roll * 0.05;
+
+    float constant = 0.02 * (3.142 / 180);
+    angle_pitch -= angle_roll * sin(gyro_yaw * constant);
+    angle_roll += angle_pitch * sin(gyro_yaw * constant);
+
+    float accl_x = accel1.acceleration.x;
+    float accl_y = accel1.acceleration.y;
+    float accl_z = accel1.acceleration.z;
+
+    long acc_total_vector = sqrt((accl_x * accl_x) + (accl_y * accl_y) + (accl_z * accl_z));
+
+    if (abs(accl_y) < acc_total_vector)    {                                                                    //Prevent the asin function to produce a NaN
+      angle_pitch_acc = asin((float)accl_y / acc_total_vector) * 57.296; //Calculate the pitch angle.
+    }
+    if (abs(accl_x) < acc_total_vector)    {                                                                    //Prevent the asin function to produce a NaN
+      angle_roll_acc = asin((float)accl_x / acc_total_vector) * -57.296; //Calculate the roll angle.
+    }
+
+    angle_pitch = angle_pitch * 0.995 + angle_pitch_acc * 0.005; //Correct the drift of gyro pitch angle with the accl pitch angle.
+    angle_roll = angle_roll * 0.995 + angle_roll_acc * 0.005;    //Correct the drift of gyro roll angle with the accl roll angle.
+
+    acc_pitch_cal += angle_pitch;
+    acc_roll_cal += angle_roll;
+
+    PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
+    delayMicroseconds(1000);
+    PORTA &= B11000000;
+    delay(3);                                               //Wait 3 milliseconds before the next loop.
+  }
+
+  acc_pitch_cal /= 2000;
+  acc_roll_cal /= 2000;
+
+  angle_pitch = 0;
+  angle_roll = 0;
+
+  Serial.println("Accelerometer calibration done!");
+  Serial.println("Pitch: " + (String) acc_pitch_cal);
+  Serial.println("Roll: " + (String) acc_roll_cal);
 }
 
 ISR(PCINT2_vect){

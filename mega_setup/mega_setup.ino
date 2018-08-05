@@ -55,6 +55,7 @@ void loop(){
   
   if(error == 0) {
     Serial.println("Setup SUCCESS!");
+    Serial.println("You may close the program now :)");
   } else {
     Serial.println("There is an error during setup. Please try again.");
   }
@@ -166,25 +167,25 @@ void register_min_max(){
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("High, low and center values found during setup"));
-  Serial.print(F("Digital input 08 values:"));
+  Serial.print(F("Digital input 08 values: "));
   Serial.print(low_channel_1);
   Serial.print(F(" - "));
   Serial.print(center_channel_1);
   Serial.print(F(" - "));
   Serial.println(high_channel_1);
-  Serial.print(F("Digital input 09 values:"));
+  Serial.print(F("Digital input 09 values: "));
   Serial.print(low_channel_2);
   Serial.print(F(" - "));
   Serial.print(center_channel_2);
   Serial.print(F(" - "));
   Serial.println(high_channel_2);
-  Serial.print(F("Digital input 10 values:"));
+  Serial.print(F("Digital input 10 values: "));
   Serial.print(low_channel_3);
   Serial.print(F(" - "));
   Serial.print(center_channel_3);
   Serial.print(F(" - "));
   Serial.println(high_channel_3);
-  Serial.print(F("Digital input 11 values:"));
+  Serial.print(F("Digital input 11 values: "));
   Serial.print(low_channel_4);
   Serial.print(F(" - "));
   Serial.print(center_channel_4);
