@@ -6,15 +6,6 @@
 //*  Channel 4: YAW
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DEBUG_SENSOR
-//*#define DEBUG_TRANSMITTER         //?Raw transmitter values
-//*#define DEBUG_CHANNELS              //?Converted transmitter values
-//*#define DEBUG_START_STOP
-//*#define DEBUG_PID_OFFSETS
-//*#define DEBUG_PID
-//*#define DEBUG_ESC_OUTPUT
-//*#define DEBUG_BATTERY_VOLTAGE
-
 //TODO: Ensure stable angles during flight
 //TODO: Check PID outputs --> Test flight for I controller (Make sure max output is correct)
 //TODO: Battery voltage integration
@@ -46,7 +37,7 @@ int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 //Misc. variables
 byte eeprom_data[27];
 float battery_voltage;
-int start, difference, main_loop_timer; 
+int start, difference, main_loop_timer;
 bool angle_first_start = true;
 
 //Sensor variables
@@ -77,7 +68,7 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
-void setup(){
+void setup() {
   Wire.begin();
   Serial.begin(115200);
   delay(500);
@@ -89,11 +80,6 @@ void setup(){
     eeprom_data[start] = EEPROM.read(start);
   while (eeprom_data[24] != 'J' || eeprom_data[25] != 'M' || eeprom_data[26] != 'B')
     delay(10);
-
-  receiver_input_channel_1 = 0;
-  receiver_input_channel_2 = 0;
-  receiver_input_channel_3 = 0;
-  receiver_input_channel_4 = 0;
 
   Serial.println("Initialising pins...");
 
@@ -111,7 +97,7 @@ void setup(){
 
   DDRA |= B00111111; // Set digital pins 22 - 27 to OUTPUT
 
-  Serial.println("Setting up sensors...");
+  Serial.println("CALLIBRATING sensors...");
 
   setupSensor();
   calibrateSensors();
@@ -124,11 +110,7 @@ void setup(){
     receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
     start++;                                                //While waiting increment start whith every loop.
 
-    PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
-    delayMicroseconds(1000);
-    PORTA &= B11000000;
-    delay(3);                                               //Wait 3 milliseconds before the next loop.
-
+    pulse_esc();
     if (start == 125) {
       digitalWrite(13, !digitalRead(13));                   //Change the led status.
       start = 0;                                            //Start again at 0.
@@ -143,17 +125,25 @@ void setup(){
   digitalWrite(13, LOW);
   Serial.println("SETUP DONE!");
 
-  for(int i = 5; i > 0; i--){
+  for (int i = 5; i > 0; i--) {
     Serial.print((String) i + " ");
+    pulse_esc();
     delay(1000);
   }
+}
+
+void pulse_esc() {
+  PORTA |= B00111111;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
+  delayMicroseconds(1000);
+  PORTA &= B11000000;
+  delay(3);                                               //Wait 3 milliseconds before the next loop.
 }
 
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 //* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
-void loop(){
+void loop() {
   convert_transmitter_values();
 
   calculate_pitch_roll();
@@ -171,9 +161,10 @@ void loop(){
   check_battery_voltage();
 
   difference = micros() - main_loop_timer;
-  while (difference < 4000){
+  while (difference < 4000) {
     difference = micros() - main_loop_timer;
   }
+  //Serial.println(difference);
   main_loop_timer = micros();
 }
 
@@ -181,17 +172,17 @@ void loop(){
 //* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
-void calculate_pitch_roll(){
+void calculate_pitch_roll() {
   gyro_yaw_input = (gyro_yaw_input * 0.7) + (gyro_yaw * 0.3);       //Gyro pid input is deg/sec.
 
-  Wire.beginTransmission(gyro_address);                                   //Start communication with the gyro.
+  Wire.beginTransmission(imu_address);                                   //Start communication with the gyro.
   Wire.write(0x3B);                                                       //Start reading @ register 3Bh and auto increment with every read.
   Wire.endTransmission();                                                 //End the transmission.
-  Wire.requestFrom(gyro_address, 14);                                     //Request 14 bytes from the gyro.
+  Wire.requestFrom(imu_address, 14);                                     //Request 14 bytes from the gyro.
 
   while (Wire.available() < 14);                                          //Wait until the 14 bytes are received.
-  acc_x = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
-  acc_y = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
+  acc_y = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
+  acc_x = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
   acc_z = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
   temperature = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the temperature variable.
   gyro_pitch = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
@@ -203,47 +194,39 @@ void calculate_pitch_roll(){
   gyro_yaw -= gyro_cal[3];
 
   //Gyro calculations 0.000061069 = 1 / (0.004 / 65.5)
-  angle_pitch += gyro_pitch * 0.000061069;
-  angle_roll += gyro_roll * 0.000061069;
-  
+  angle_roll += gyro_pitch * -0.000061069;
+  angle_pitch += gyro_roll * -0.000061069;
+
   //Convert 0.000061069 into radians = 0.0000010658
-  angle_pitch -= angle_roll * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the roll angle to the pitch angel.
-  angle_roll += angle_pitch * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the pitch angle to the roll angel.
-  
+  angle_roll += angle_pitch * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the roll angle to the pitch angel.
+  angle_pitch -= angle_roll * sin(gyro_yaw * 0.0000010658);                  //If the IMU has yawed transfer the pitch angle to the roll angel.
+
   //Accelerometer calculations
   float acc_total_vector = sqrt((acc_x * acc_x) + (acc_y * acc_y) + (acc_z * acc_z)); //Calculate the total accelerometer vector.
 
   //180 / PI = 57.296 --> Convert into degrees
   if (abs(acc_y) < acc_total_vector) {                                      //Prevent the asin function to produce a NaN
-    angle_pitch_acc = asin((float) acc_y / acc_total_vector) * 57.296;       //Calculate the pitch angle.
+    angle_pitch_acc = asin((float) acc_y / acc_total_vector) * -57.296;       //Calculate the pitch angle.
   }
   if (abs(acc_x) < acc_total_vector) {                                      //Prevent the asin function to produce a NaN
-    angle_roll_acc = asin((float) acc_x / acc_total_vector) * -57.296;       //Calculate the roll angle.
+    angle_roll_acc = asin((float) acc_x / acc_total_vector) * 57.296;       //Calculate the roll angle.
   }
 
-  angle_pitch_acc -= 0.80; //Accelerometer calibration value for pitch.
-  angle_roll_acc += 0.40;   //Accelerometer calibration value for roll.
+  angle_pitch_acc += 1.1; //Accelerometer calibration value for pitch.
+  angle_roll_acc += 1.6;   //Accelerometer calibration value for roll.
 
-  if (angle_first_start) {
-    angle_pitch = angle_pitch_acc;
-    angle_roll = angle_roll_acc;
-    angle_first_start = false;
-  } else {
-    angle_pitch = angle_pitch * 0.99 + angle_pitch_acc * 0.01;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
-    angle_roll = angle_roll * 0.99 + angle_roll_acc * 0.01;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
-  }
+  angle_pitch = angle_pitch * 0.99 + angle_pitch_acc * 0.01;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
+  angle_roll = angle_roll * 0.99 + angle_roll_acc * 0.01;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
 
-  #ifdef DEBUG_SENSOR
-    Serial.println("Pitch angle: " + (String) angle_pitch);
-    Serial.println("Roll angle: " + (String) angle_roll);
+  Serial.print("PITCH: ");
+    Serial.println(angle_pitch);
+    Serial.print("ROLL: ");
+    Serial.println(angle_roll);
     Serial.println("");
-  #endif
 }
 
-void check_start_stop(){
-  #ifdef DEBUG_START_STOP
-    Serial.println("Start value: " + (String) start);
-  #endif
+void check_start_stop() {
+  //Serial.println("Start value: " + (String) start);
 
   //For starting the motors: throttle low and yaw left (step 1).
   if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
@@ -279,8 +262,8 @@ void check_start_stop(){
   }
 }
 
-void set_pid_offsets(){
-//* ///////////////////////////////////// Roll setpoints /////////////////////////////////////////////////
+void set_pid_offsets() {
+  //* ///////////////////////////////////// Roll setpoints /////////////////////////////////////////////////
   pid_roll_setpoint = 0;
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  {
@@ -289,10 +272,10 @@ void set_pid_offsets(){
     else if (receiver_input_channel_1 < 1496)
       pid_roll_setpoint = receiver_input_channel_1 - 1496;
 
-    pid_roll_setpoint = map(pid_roll_setpoint, 0, 496, 0, 50);    //! Output: 0 to 40 degrees of roll 
+    pid_roll_setpoint = map(pid_roll_setpoint, 0, 496, 0, 50);    //! Output: 0 to 40 degrees of roll
   }
 
-//* ///////////////////////////////////// Pitch setpoints /////////////////////////////////////////////////
+  //* ///////////////////////////////////// Pitch setpoints /////////////////////////////////////////////////
   pid_pitch_setpoint = 0;
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  {
@@ -301,10 +284,10 @@ void set_pid_offsets(){
     else if (receiver_input_channel_2 < 1496)
       pid_pitch_setpoint = receiver_input_channel_2 - 1496;
 
-    pid_pitch_setpoint = map(pid_pitch_setpoint, 0, 496, 0, 50);  //! Output: 0 to 40 degrees of pitch 
+    pid_pitch_setpoint = map(pid_pitch_setpoint, 0, 496, 0, 50);  //! Output: 0 to 40 degrees of pitch
   }
 
-//* ///////////////////////////////////// Yaw setpoints /////////////////////////////////////////////////
+  //* ///////////////////////////////////// Yaw setpoints /////////////////////////////////////////////////
   //The PID set point in degrees per second is determined by the yaw receiver input.
   //In the case of deviding by 3 the max yaw rate is aprox 164 degrees per second ((500-8)/3 = 164d/s).
   pid_yaw_setpoint = 0;
@@ -316,17 +299,15 @@ void set_pid_offsets(){
       pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
   }
 
-  #ifdef DEBUG_PID_OFFSETS
-    Serial.print(pid_roll_setpoint);
+  /*Serial.print(pid_roll_setpoint);
     Serial.print(", ");
     Serial.print(pid_pitch_setpoint);
     Serial.print(", ");
     Serial.print(pid_yaw_setpoint);
-    Serial.println("");
-  #endif
+    Serial.println("");*/
 }
 
-void calculate_pid(){
+void calculate_pid() {
   //* //////////////////////////////////////// Roll calculation //////////////////////////////////////////
   pid_error_temp = angle_roll - pid_roll_setpoint;        //? Calculate error //angle_roll - pid_roll_setpoint
   pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
@@ -378,18 +359,16 @@ void calculate_pid(){
     pid_output_yaw = pid_max_yaw * -1;
 
   pid_last_yaw_d_error = pid_error_temp;
-
-  #ifdef DEBUG_PID
+  /*
     Serial.print(pid_output_roll);
     Serial.print(", ");
     Serial.print(pid_output_pitch);
     Serial.print(", ");
     Serial.print(pid_output_yaw);
-    Serial.println("\n");
-  #endif
+    Serial.println("\n");*/
 }
 
-void calculate_esc_output(){
+void calculate_esc_output() {
   throttle = receiver_input_channel_3; //We need the throttle signal as a base signal.
 
   if (start == 2)  { //The motors are started.
@@ -408,7 +387,7 @@ void calculate_esc_output(){
       esc_4 += esc_4 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-4 pulse for voltage drop.
       esc_5 += esc_5 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-5 pulse for voltage drop.
       esc_6 += esc_6 * ((830 - battery_voltage) / (float)3500); //Compensate the esc-6 pulse for voltage drop.
-    }*/
+      }*/
 
     if (esc_1 < 1100)      esc_1 = 1100; //Keep the motors running.
     if (esc_2 < 1100)      esc_2 = 1100; //Keep the motors running.
@@ -432,8 +411,7 @@ void calculate_esc_output(){
     esc_6 = 1000;                        //If start is not 2 keep a 1000us pulse for esc-6.
   }
 
-  #ifdef DEBUG_ESC_OUTPUT
-    Serial.print(esc_1);
+  /*Serial.print(esc_1);
     Serial.print(", ");
     Serial.print(esc_2);
     Serial.print(", ");
@@ -444,11 +422,10 @@ void calculate_esc_output(){
     Serial.print(esc_5);
     Serial.print(", ");
     Serial.print(esc_6);
-    Serial.println("");
-  #endif
+    Serial.println("");*/
 }
 
-void set_escs(){
+void set_escs() {
   //TODO: Check time taken for loop cycle!
   loop_timer = micros();
   PORTA |= B00111111;                   //Set digital pin 22 - 27 as HIGH
@@ -470,20 +447,18 @@ void set_escs(){
   }
 }
 
-void check_battery_voltage(){
+void check_battery_voltage() {
   float constant = (5000 / 1023.0) * 0.08;
   battery_voltage = battery_voltage * 0.92 + analogRead(A0) * constant + 2;
 
-  if (battery_voltage < 680 && battery_voltage > 600){
+  if (battery_voltage < 680 && battery_voltage > 600) {
     //digitalWrite(13, HIGH);
   }
-  
-  #ifdef DEBUG_BATTERY_VOLTAGE
-    Serial.println("Battery left: " + (String) battery_voltage);
-  #endif
+
+  //Serial.println("Battery left: " + (String) battery_voltage);
 }
 
-int convert_receiver_channel(byte function){
+int convert_receiver_channel(byte function) {
   int low, center, high, actual;
   int difference;
 
@@ -508,33 +483,29 @@ int convert_receiver_channel(byte function){
     return 1500;
 }
 
-void convert_transmitter_values(){
+void convert_transmitter_values() {
   receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
   receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
 
-  #ifdef DEBUG_TRANSMITTER
-    for (int i = 1; i < 9; i++) {
-        Serial.print(receiver_input[i]);
-        Serial.print(", ");
+  /*for (int i = 1; i < 9; i++) {
+      Serial.print(receiver_input[i]);
+      Serial.print(", ");
     }
-    Serial.println("");
-  #endif
-
-  #ifdef DEBUG_CHANNELS
-    Serial.print(receiver_input_channel_1);
+    Serial.println("");*/
+  
+    /*Serial.print(receiver_input_channel_1);
     Serial.print(", ");
     Serial.print(receiver_input_channel_2);
     Serial.print(", ");
     Serial.print(receiver_input_channel_3);
     Serial.print(", ");
     Serial.print(receiver_input_channel_4);
-    Serial.println("");
-  #endif
+    Serial.println("");*/
 }
 
-void setupSensor(){
+void setupSensor() {
   Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search.
   Wire.write(0x6B);                                                          //We want to write to the PWR_MGMT_1 register (6B hex)
   Wire.write(0x00);                                                          //Set the register bits as 00000000 to activate the gyro
@@ -567,13 +538,13 @@ void setupSensor(){
   Wire.endTransmission();                                                    //End the transmission with the gyro
 }
 
-void calibrateSensors(){
+void calibrateSensors() {
   //* //////////////////////////////////////// Gyroscope calibration //////////////////////////////////////////
   for (int i = 0; i < 2000; i++) {
-    Wire.beginTransmission(gyro_address);                                   //Start communication with the gyro.
+    Wire.beginTransmission(imu_address);                                   //Start communication with the gyro.
     Wire.write(0x43);                                                       //Start reading @ register 43h and auto increment with every read.
     Wire.endTransmission();                                                 //End the transmission.
-    Wire.requestFrom(gyro_address, 6);                                      //Request 14 bytes from the gyro.
+    Wire.requestFrom(imu_address, 6);                                      //Request 14 bytes from the gyro.
 
     while (Wire.available() < 6);                                          //Wait until the 6 bytes are received.
     gyro_cal[1] = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
@@ -594,7 +565,7 @@ void calibrateSensors(){
   for (int i = 0; i < 3; i++) Serial.println(gyro_cal[i]);
 }
 
-ISR(PCINT2_vect){
+ISR(PCINT2_vect) {
   current_time = micros();
   //*============================================= Channel 1 =============================================
   if (PINK & B00000001)  {                      //Is input A8 high?
