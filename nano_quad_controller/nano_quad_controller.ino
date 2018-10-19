@@ -57,9 +57,14 @@ void setup(){
     }
 
     //Battery voltage calculation
-    battery_voltage = analogRead(A0) * (5000 / 1023.0) + 20;
+    float voltage = analogRead(A0) * (5000 / 1023.0) + 20;
+    battery_voltage = (voltage + 0.5) * 167;
     Serial.println("Current battery reading: " + (String) battery_voltage);
 }
+
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
+//* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
 void loop(){
     convert_receiver_channel();
@@ -72,11 +77,17 @@ void loop(){
 
     set_esc();
 
+    calculate_battery();
+
     difference = micros() - main_loop_timer;
     while (difference < 4000) {
         difference = micros() - main_loop_timer;
     }
 }
+
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
+//* //////////////////////////////////////// MAIN LOOP /////////////////////////////////////////////////// *//
+//* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
 void convert_transmitter_values() {
     receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
@@ -113,6 +124,10 @@ void calculate_outputs() {
     roll_output = receiver_input_channel_1 - 1500;
     pitch_output = receiver_input_channel_2 - 1500;
     yaw_output = receiver_input_channel_4 - 1500;
+
+    roll_output *= output_gain;
+    pitch_output *= output_gain;
+    yaw_output *= output_gain;
 }
 
 void calculate_esc_output() {
@@ -165,6 +180,15 @@ void set_esc() {
         if (timer_channel_3 <= esc_loop_timer) PORTD &= B10111111; //Set digital output 24 to low if the time is expired.
         if (timer_channel_4 <= esc_loop_timer) PORTD &= B01111111; //Set digital output 25 to low if the time is expired.
     }
+}
+
+void calculate_battery() {
+    float diodeForward = 0.5;
+    int potDivider = 167;
+
+    int sensorValue = analogRead(A0);
+    float voltage = sensorValue * (5.0/1023);
+    battery_voltage = (voltage + diodeForward) * potDivider;
 }
 
 int convert_receiver_channel(byte function) {
