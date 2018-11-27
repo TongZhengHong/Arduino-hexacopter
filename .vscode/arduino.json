@@ -1,6 +1,6 @@
 {
-    "board": "arduino:avr:mega",
-    "port": "COM7",
+    "board": "arduino:avr:nano",
+    "port": "COM6",
     "sketch": "mega_flight_controller\\mega_flight_controller.ino",
-    "configuration": "cpu=atmega2560"
+    "configuration": "cpu=atmega328"
 }

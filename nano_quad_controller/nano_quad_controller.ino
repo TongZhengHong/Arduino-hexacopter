@@ -6,8 +6,11 @@
 //*  Channel 4: YAW
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
+#include <EEPROM.h>
+
 byte eeprom_data[27];
 int main_loop_timer, difference, start;
+int battery_voltage;
 
 byte last_channel_1, last_channel_2, last_channel_3, last_channel_4;
 unsigned long timer_1, timer_2, timer_3, timer_4, current_time;
@@ -18,7 +21,8 @@ double output_gain = 0.5;
 int roll_output, pitch_output, yaw_output;
 
 int throttle;
-unsigned long loop_timer;
+unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4;
+unsigned long loop_timer, esc_loop_timer;
 int esc_1, esc_2, esc_3, esc_4;
 
 void setup(){
@@ -67,7 +71,7 @@ void setup(){
 //* ////////////////////////////////////////////////////////////////////////////////////////////////////// *//
 
 void loop(){
-    convert_receiver_channel();
+    convert_transmitter_values();
 
     check_start_stop();
 
@@ -135,10 +139,10 @@ void calculate_esc_output() {
 
     if (start == 2) {
         if (throttle > 1850) throttle = 1850;
-        esc_1 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //*(CW)
-        esc_2 = throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //*(ACW)
-        esc_3 = throttle + pid_output_pitch + pid_output_roll - pid_output_yaw; //*(CW)
-        esc_4 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //*(ACW)
+        esc_1 = throttle - pitch_output - roll_output - yaw_output; //*(CW)
+        esc_2 = throttle + pitch_output - roll_output + yaw_output; //*(ACW)
+        esc_3 = throttle + pitch_output + roll_output - yaw_output; //*(CW)
+        esc_4 = throttle - pitch_output + roll_output + yaw_output; //*(ACW)
 
         /*if (battery_voltage < 830 && battery_voltage > 600)    {                                                           //Is the battery connected?
             esc_1 += esc_1 * ((830 - battery_voltage) / (float) 3500); //Compensate the esc-1 pulse for voltage drop.
