@@ -68,22 +68,22 @@ void setup () {
 
   DDRD |= B11110000;
 
-//  Serial.println("Turn on your transmitter and place throttle at lowest position!");
-//  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-//    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-//    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-//    start++;                                                //While waiting increment start whith every loop.
-//
-////    Serial.println(receiver_input_channel_3);
-////    Serial.println(receiver_input_channel_4);
-////    Serial.println();
-//
-//    pulse_esc();
-//    if (start == 125) {
-//      digitalWrite(13, !digitalRead(13));                   //Change the led status.
-//      start = 0;                                            //Start again at 0.
-//    }
-//  }
+ Serial.println("Turn on your transmitter and place throttle at lowest position!");
+ while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+   start++;                                                //While waiting increment start whith every loop.
+
+//    Serial.println(receiver_input_channel_3);
+//    Serial.println(receiver_input_channel_4);
+//    Serial.println();
+
+   pulse_esc();
+   if (start == 125) {
+     digitalWrite(13, !digitalRead(13));                   //Change the led status.
+     start = 0;                                            //Start again at 0.
+   }
+ }
   start = 0;
   Serial.println("Transmitter detected!");
 

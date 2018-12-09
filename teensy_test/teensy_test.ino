@@ -64,7 +64,6 @@ void setup() {
   PORTC_PCR5 = (1 << 8);  //configuring the pin as GPIO
   GPIOC_PDDR = (1 << 5);  //configuring the pin as an output
   GPIOC_PSOR = (1 << 5);  //setting LED pin high
-
   for (int i = 0; i < 2000; i++) {
     sensors_event_t accel, mag, gyro, temp;
     lsm.getEvent(&accel, &mag, &gyro, &temp);

@@ -44,11 +44,10 @@ int convert_receiver_channel(byte function) {
     return 1500;
 }
 
-
 ISR(PCINT0_vect) {
   current_time = micros();
   //* ========================================= Channel 1 =========================================
-  if (PINB & B00010000) {                                                   //Is input 8 high?
+  if (PINB & B00000001) {                                                   //Is input 8 high?
     if (last_channel_1 == 0) {                                              //Input 8 changed from 0 to 1.
       last_channel_1 = 1;                                                   //Remember current input state.
       timer_1 = current_time;                                               //Set timer_1 to current_time.
@@ -59,7 +58,7 @@ ISR(PCINT0_vect) {
     receiver_input[1] = current_time - timer_1;                             //Channel 1 is current_time - timer_1.
   }
   //* ========================================= Channel 2 =========================================
-  if (PINB & B00001000) {                                                  //Is input 9 high?
+  if (PINB & B00000010) {                                                  //Is input 9 high?
     if (last_channel_2 == 0) {                                              //Input 9 changed from 0 to 1.
       last_channel_2 = 1;                                                   //Remember current input state.
       timer_2 = current_time;                                               //Set timer_2 to current_time.
@@ -81,7 +80,7 @@ ISR(PCINT0_vect) {
     receiver_input[3] = current_time - timer_3;                             //Channel 3 is current_time - timer_3.
   }
   //* ========================================= Channel 4 =========================================
-  if (PINB & B00000010) {                                                  //Is input 11 high?
+  if (PINB & B00001000) {                                                  //Is input 11 high?
     if (last_channel_4 == 0) {                                              //Input 11 changed from 0 to 1.
       last_channel_4 = 1;                                                   //Remember current input state.
       timer_4 = current_time;                                               //Set timer_4 to current_time.
@@ -92,7 +91,7 @@ ISR(PCINT0_vect) {
     receiver_input[4] = current_time - timer_4;                             //Channel 4 is current_time - timer_4.
   }
   //* ========================================= Channel 5 =========================================
-  if (PINB & B00000001) {                                                  //Is input 12 high?
+  if (PINB & B00010000) {                                                  //Is input 12 high?
     if (last_channel_5 == 0) {                                              //Input 12 changed from 0 to 1.
       last_channel_5 = 1;                                                   //Remember current input state.
       timer_5 = current_time;                                               //Set timer_5 to current_time.

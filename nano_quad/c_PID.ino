@@ -39,9 +39,11 @@ void set_pid_offsets() {
       pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
   }
 
-//  Serial.println(pid_roll_setpoint);
-//  Serial.println(pid_pitch_setpoint);
-//  Serial.println(pid_yaw_setpoint);
+//  Serial.print(pid_roll_setpoint);
+//  Serial.print(" ");
+//  Serial.print(pid_pitch_setpoint);
+//  Serial.print(" ");
+//  Serial.print(pid_yaw_setpoint);
 //  Serial.println();
 }
 
