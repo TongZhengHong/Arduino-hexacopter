@@ -1,10 +1,8 @@
 #include <Wire.h>
 #include <EEPROM.h>
 
-#define RATES
-
 //* /////////////////////////////////////////////////////////////////////////////////////////////
-float pid_p_gain_roll = 0.5;  //Gain setting for the roll P-controller
+float pid_p_gain_roll = 0.8;  //Gain setting for the roll P-controller
 float pid_i_gain_roll = 0.0;  //Gain setting for the roll I-controller
 float pid_d_gain_roll = 0.2;    //Gain setting for the roll D-controller
 int pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
@@ -16,7 +14,7 @@ float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-control
 int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
 int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
 
-float pid_p_gain_yaw = 0.0;  //Gain setting for the pitch P-controller. //4.0
+float pid_p_gain_yaw = 0.5;  //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
 float pid_d_gain_yaw = 0.0;  //Gain setting for the pitch D-controller.
 int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
@@ -26,16 +24,20 @@ int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 int start;
 int difference, main_loop_timer;
 byte eeprom_data[27];
+byte page_number = 0;
+bool screen_free = false;
 
 //Transmitter variables
-int receiver_input_channel_1, receiver_input_channel_2, receiver_input_channel_3, receiver_input_channel_4;
+int receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
+    receiver_input_channel_3 = 0, receiver_input_channel_4 = 0;
 
 //IMU variables
 double gyro_cal[4];
+double acc_cal_roll, acc_cal_pitch;
 
 long acc_x, acc_y, acc_z, acc_total_vector;
 float temperature;
-double gyro_roll, gyro_pitch, gyro_yaw;
+float gyro_roll, gyro_pitch, gyro_yaw;
 
 float angle_roll, angle_pitch;
 float angle_roll_acc, angle_pitch_acc;
@@ -47,9 +49,17 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
+typedef union {
+  int integer;
+  byte one_byte;
+  uint8_t two_bytes[2];
+} converter;
+
 void setup () {
-  Wire.begin();
   Serial.begin(115200);
+  Wire.begin(9);
+  TWBR = 12;
+  Wire.onReceive(receive_event);
 
   pinMode(13, OUTPUT);
   digitalWrite(13, HIGH);
@@ -68,25 +78,40 @@ void setup () {
 
   DDRD |= B11110000;
 
- Serial.println("Turn on your transmitter and place throttle at lowest position!");
- while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-   start++;                                                //While waiting increment start whith every loop.
+  for (int i = 10; i > 0; i--) {
+    Serial.print(i);
+    Serial.print(" ");
+    delay(1000);
+  }
+  Serial.println("start");
+  Wire.beginTransmission(8);
+  byte number = 1;
+  Wire.write(number);
+  Wire.endTransmission();
 
-//    Serial.println(receiver_input_channel_3);
-//    Serial.println(receiver_input_channel_4);
-//    Serial.println();
+  Serial.println("Turn on your transmitter and place throttle at lowest position!");
+  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+    start++;                                                //While waiting increment start whith every loop.
 
-   pulse_esc();
-   if (start == 125) {
-     digitalWrite(13, !digitalRead(13));                   //Change the led status.
-     start = 0;                                            //Start again at 0.
-   }
- }
+    //    Serial.println(receiver_input_channel_3);
+    //    Serial.println(receiver_input_channel_4);
+    //    Serial.println();
+
+    pulse_esc();
+    if (start == 125) {
+      digitalWrite(13, !digitalRead(13));                   //Change the led status.
+      start = 0;                                            //Start again at 0.
+    }
+  }
   start = 0;
   Serial.println("Transmitter detected!");
 
+  Wire.beginTransmission (8);
+  Wire.write(2);
+  Wire.endTransmission();
+  
   setupSensor();
   calibrateSensors();
   digitalWrite(13, LOW);
@@ -94,16 +119,24 @@ void setup () {
   int battery = calculate_battery();
   Serial.println("Battery left: " + (String) battery);
   Serial.println("Setup DONE!");
+  
+  Wire.beginTransmission (8);
+  Wire.write(3);
+  Wire.endTransmission();
+
   for (int i = 3; i > 0; i--) {
     Serial.print((String) i + " ");
     delay(1000);
     pulse_esc();
   }
+  Wire.beginTransmission (8);
+  Wire.write(4);
+  Wire.endTransmission();
 }
 
 void loop () {
   convert_transmitter_values();
-  
+
   calculate_pitch_roll();
 
   check_start_stop();
@@ -115,6 +148,8 @@ void loop () {
   calculate_esc_output();
 
   set_escs();
+
+  display_data();
 
   maintain_loop_time();
 }
@@ -166,6 +201,48 @@ int calculate_battery() {
   return battery_voltage;
 }
 
+void display_data() {
+  if (!screen_free) return;
+
+  Wire.requestFrom(8, 1);   //Request ONE byte of data from pro mini of current page
+  while (Wire.available()) page_number = Wire.read();
+  
+  converter number;
+  switch (page_number) {
+    case 2:   //Total bytes transfered: 4
+      number.integer = angle_roll * 100;
+      Wire.beginTransmission(8);
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      number.integer = angle_pitch * 100;
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      Wire.endTransmission();
+      break;
+    case 1:   //Total bytes transfered: 4
+      int data[4];
+      data[0] = receiver_input_channel_1 / 10;
+      data[1] = receiver_input_channel_2 / 10;
+      data[2] = receiver_input_channel_3 / 10;
+      data[3] = receiver_input_channel_4 / 10;
+
+      Wire.beginTransmission(8);
+      for (int i = 0; i < 4; i++) {
+        number.integer = data[i];
+        Wire.write(number.one_byte);
+      }
+      Wire.endTransmission();
+      break;
+    case 3:   //Total bytes transfered: 2
+      number.integer = calculate_battery();
+      Wire.beginTransmission(8); // transmit to device #8
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      Wire.endTransmission();
+      break;
+  }
+}
+
 void maintain_loop_time () {
   difference = micros() - main_loop_timer;
   while (difference < 5000) {
@@ -180,4 +257,9 @@ void pulse_esc() {
   delayMicroseconds(1000);
   PORTD &= B00001111;
   delay(3);                                               //Wait 3 milliseconds before the next loop.
+}
+
+void receive_event(int bytes) {
+  while (Wire.available() < 1); 
+  screen_free = Wire.read();
 }
