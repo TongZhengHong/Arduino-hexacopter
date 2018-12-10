@@ -1,8 +1,5 @@
 #include <EEPROM.h>
 
-//#define MEGA_SETUP
-#define NANO_SETUP
-
 int error = 0;
 
 //Transmitter variables
@@ -15,132 +12,121 @@ int center_channel_1, center_channel_2, center_channel_3, center_channel_4;
 int high_channel_1, high_channel_2, high_channel_3, high_channel_4;
 int low_channel_1, low_channel_2, low_channel_3, low_channel_4;
 
-void setup(){
+void setup() {
   Serial.begin(115200);
-  
-  #ifdef MEGA_SETUP
-    PCICR |= (1 << PCIE2);     // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port K.
-    
-    PCMSK2 |= (1 << PCINT16);  // set PCINT16 (digital input A8) to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT17);  // set PCINT17 (digital input A9)to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT18);  // set PCINT18 (digital input A10)to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT19);  // set PCINT19 (digital input A11)to trigger an interrupt on state change
-    
-    PCMSK2 |= (1 << PCINT20);  // set PCINT20 (digital input A12) to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT21);  // set PCINT21 (digital input A13)to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT22);  // set PCINT22 (digital input A14)to trigger an interrupt on state change
-    PCMSK2 |= (1 << PCINT23);  // set PCINT23 (digital input A15)to trigger an interrupt on state change
-  #endif
 
-  #ifdef NANO_SETUP
-    PCICR |= (1 << PCIE0);                                                    //Set PCIE0 to enable PCMSK0 scan.
-    PCMSK0 |= (1 << PCINT0);                                                  //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
-    PCMSK0 |= (1 << PCINT1);                                                  //Set PCINT1 (digital input 9)to trigger an interrupt on state change.
-    PCMSK0 |= (1 << PCINT2);                                                  //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
-    PCMSK0 |= (1 << PCINT3);                                                  //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
-    PCMSK0 |= (1 << PCINT4);                                                  //Set PCINT4 (digital input 12)to trigger an interrupt on state change.
-  #endif
+  PCICR |= (1 << PCIE2);     // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port K.
+
+  PCMSK2 |= (1 << PCINT16);  // set PCINT16 (digital input A8) to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT17);  // set PCINT17 (digital input A9)to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT18);  // set PCINT18 (digital input A10)to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT19);  // set PCINT19 (digital input A11)to trigger an interrupt on state change
+
+  PCMSK2 |= (1 << PCINT20);  // set PCINT20 (digital input A12) to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT21);  // set PCINT21 (digital input A13)to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT22);  // set PCINT22 (digital input A14)to trigger an interrupt on state change
+  PCMSK2 |= (1 << PCINT23);  // set PCINT23 (digital input A15)to trigger an interrupt on state change
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-void loop(){
-  if(error == 0)  {
+void loop() {
+  if (error == 0)  {
     wait_for_receiver();  //Wait for transmitter to be turned on within 10 seconds
   }
 
-  if(error == 0)  {
+  if (error == 0)  {
     record_center_position(); //Find out the center positions of transmitter (including throttle)
   }
 
-  if(error == 0)  { 
+  if (error == 0)  {
     register_min_max();   //Register the min and max values of the receiver channels
   }
-  
-  if(error == 0){
+
+  if (error == 0) {
     save_eeprom_data();   //If all is good, store the information in the EEPROM
   }
-  
-  if(error == 0) {
+
+  if (error == 0) {
     Serial.println("Setup SUCCESS!");
     Serial.println("You may close the program now :)");
   } else {
     Serial.println("There is an error during setup. Please try again.");
   }
-  
-  while(1);
+
+  while (1);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////// MAIN LOOP ///////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void save_eeprom_data(){
+void save_eeprom_data() {
   Serial.println(F(""));
-    Serial.println(F("==================================================="));
-    Serial.println(F("Storing EEPROM information"));
-    Serial.println(F("==================================================="));
-    Serial.println(F("Writing EEPROM"));
-    delay(1000);
+  Serial.println(F("==================================================="));
+  Serial.println(F("Storing EEPROM information"));
+  Serial.println(F("==================================================="));
+  Serial.println(F("Writing EEPROM"));
+  delay(1000);
 
-    EEPROM.write(0, center_channel_1 & 0b11111111);
-    EEPROM.write(1, center_channel_1 >> 8);
-    EEPROM.write(2, center_channel_2 & 0b11111111);
-    EEPROM.write(3, center_channel_2 >> 8);
-    EEPROM.write(4, center_channel_3 & 0b11111111);
-    EEPROM.write(5, center_channel_3 >> 8);
-    EEPROM.write(6, center_channel_4 & 0b11111111);
-    EEPROM.write(7, center_channel_4 >> 8);
-    EEPROM.write(8, high_channel_1 & 0b11111111);
-    EEPROM.write(9, high_channel_1 >> 8);
-    EEPROM.write(10, high_channel_2 & 0b11111111);
-    EEPROM.write(11, high_channel_2 >> 8);
-    EEPROM.write(12, high_channel_3 & 0b11111111);
-    EEPROM.write(13, high_channel_3 >> 8);
-    EEPROM.write(14, high_channel_4 & 0b11111111);
-    EEPROM.write(15, high_channel_4 >> 8);
-    EEPROM.write(16, low_channel_1 & 0b11111111);
-    EEPROM.write(17, low_channel_1 >> 8);
-    EEPROM.write(18, low_channel_2 & 0b11111111);
-    EEPROM.write(19, low_channel_2 >> 8);
-    EEPROM.write(20, low_channel_3 & 0b11111111);
-    EEPROM.write(21, low_channel_3 >> 8);
-    EEPROM.write(22, low_channel_4 & 0b11111111);
-    EEPROM.write(23, low_channel_4 >> 8);
-    Serial.println(F("Done!"));
-    
-    //Write the EEPROM signature
-    EEPROM.write(24, 'J'); 
-    EEPROM.write(25, 'M');
-    EEPROM.write(26, 'B');
-        
-    //To make sure evrything is ok, verify the EEPROM data.
-    Serial.println(F("Verify EEPROM data"));
-    delay(1000);
-    if(center_channel_1 != ((EEPROM.read(1) << 8) | EEPROM.read(0)))error = 1;
-    if(center_channel_2 != ((EEPROM.read(3) << 8) | EEPROM.read(2)))error = 1;
-    if(center_channel_3 != ((EEPROM.read(5) << 8) | EEPROM.read(4)))error = 1;
-    if(center_channel_4 != ((EEPROM.read(7) << 8) | EEPROM.read(6)))error = 1;
-    
-    if(high_channel_1 != ((EEPROM.read(9) << 8) | EEPROM.read(8)))error = 1;
-    if(high_channel_2 != ((EEPROM.read(11) << 8) | EEPROM.read(10)))error = 1;
-    if(high_channel_3 != ((EEPROM.read(13) << 8) | EEPROM.read(12)))error = 1;
-    if(high_channel_4 != ((EEPROM.read(15) << 8) | EEPROM.read(14)))error = 1;
-    
-    if(low_channel_1 != ((EEPROM.read(17) << 8) | EEPROM.read(16)))error = 1;
-    if(low_channel_2 != ((EEPROM.read(19) << 8) | EEPROM.read(18)))error = 1;
-    if(low_channel_3 != ((EEPROM.read(21) << 8) | EEPROM.read(20)))error = 1;
-    if(low_channel_4 != ((EEPROM.read(23) << 8) | EEPROM.read(22)))error = 1;
-    
-    if('J' != EEPROM.read(24))error = 1;
-    if('M' != EEPROM.read(25))error = 1;
-    if('B' != EEPROM.read(26))error = 1;
-  
-    if(error == 1)Serial.println(F("EEPROM verification failed!!!"));
-    else Serial.println(F("Verification done"));
+  EEPROM.write(0, center_channel_1 & 0b11111111);
+  EEPROM.write(1, center_channel_1 >> 8);
+  EEPROM.write(2, center_channel_2 & 0b11111111);
+  EEPROM.write(3, center_channel_2 >> 8);
+  EEPROM.write(4, center_channel_3 & 0b11111111);
+  EEPROM.write(5, center_channel_3 >> 8);
+  EEPROM.write(6, center_channel_4 & 0b11111111);
+  EEPROM.write(7, center_channel_4 >> 8);
+  EEPROM.write(8, high_channel_1 & 0b11111111);
+  EEPROM.write(9, high_channel_1 >> 8);
+  EEPROM.write(10, high_channel_2 & 0b11111111);
+  EEPROM.write(11, high_channel_2 >> 8);
+  EEPROM.write(12, high_channel_3 & 0b11111111);
+  EEPROM.write(13, high_channel_3 >> 8);
+  EEPROM.write(14, high_channel_4 & 0b11111111);
+  EEPROM.write(15, high_channel_4 >> 8);
+  EEPROM.write(16, low_channel_1 & 0b11111111);
+  EEPROM.write(17, low_channel_1 >> 8);
+  EEPROM.write(18, low_channel_2 & 0b11111111);
+  EEPROM.write(19, low_channel_2 >> 8);
+  EEPROM.write(20, low_channel_3 & 0b11111111);
+  EEPROM.write(21, low_channel_3 >> 8);
+  EEPROM.write(22, low_channel_4 & 0b11111111);
+  EEPROM.write(23, low_channel_4 >> 8);
+  Serial.println(F("Done!"));
+
+  //Write the EEPROM signature
+  EEPROM.write(24, 'J');
+  EEPROM.write(25, 'M');
+  EEPROM.write(26, 'B');
+
+  //To make sure evrything is ok, verify the EEPROM data.
+  Serial.println(F("Verify EEPROM data"));
+  delay(1000);
+  if (center_channel_1 != ((EEPROM.read(1) << 8) | EEPROM.read(0)))error = 1;
+  if (center_channel_2 != ((EEPROM.read(3) << 8) | EEPROM.read(2)))error = 1;
+  if (center_channel_3 != ((EEPROM.read(5) << 8) | EEPROM.read(4)))error = 1;
+  if (center_channel_4 != ((EEPROM.read(7) << 8) | EEPROM.read(6)))error = 1;
+
+  if (high_channel_1 != ((EEPROM.read(9) << 8) | EEPROM.read(8)))error = 1;
+  if (high_channel_2 != ((EEPROM.read(11) << 8) | EEPROM.read(10)))error = 1;
+  if (high_channel_3 != ((EEPROM.read(13) << 8) | EEPROM.read(12)))error = 1;
+  if (high_channel_4 != ((EEPROM.read(15) << 8) | EEPROM.read(14)))error = 1;
+
+  if (low_channel_1 != ((EEPROM.read(17) << 8) | EEPROM.read(16)))error = 1;
+  if (low_channel_2 != ((EEPROM.read(19) << 8) | EEPROM.read(18)))error = 1;
+  if (low_channel_3 != ((EEPROM.read(21) << 8) | EEPROM.read(20)))error = 1;
+  if (low_channel_4 != ((EEPROM.read(23) << 8) | EEPROM.read(22)))error = 1;
+
+  if ('J' != EEPROM.read(24))error = 1;
+  if ('M' != EEPROM.read(25))error = 1;
+  if ('B' != EEPROM.read(26))error = 1;
+
+  if (error == 1)Serial.println(F("EEPROM verification failed!!!"));
+  else Serial.println(F("Verification done"));
 }
 
-void register_min_max(){
+void register_min_max() {
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("Gently move all the sticks simultaneously to their extends"));
@@ -151,31 +137,31 @@ void register_min_max(){
   low_channel_2 = receiver_input[2];
   low_channel_3 = receiver_input[3];
   low_channel_4 = receiver_input[4];
-  
-  while(receiver_input[1] < center_channel_1 + 20 && receiver_input[1] > center_channel_1 - 20){
+
+  while (receiver_input[1] < center_channel_1 + 20 && receiver_input[1] > center_channel_1 - 20) {
     //Serial.println(receiver_input[1]);
     delay(250); //check if channel 1 centered
   }
   Serial.println(F("Measuring endpoints...."));
-  while(zero < 15){
-    if(receiver_input[1] < center_channel_1 + 20 && receiver_input[1] > center_channel_1 - 20)  zero |= 0b00000001;
-    if(receiver_input[2] < center_channel_2 + 20 && receiver_input[2] > center_channel_2 - 20)  zero |= 0b00000010;
-    if(receiver_input[3] < center_channel_3 + 20 && receiver_input[3] > center_channel_3 - 20)  zero |= 0b00000100;
-    if(receiver_input[4] < center_channel_4 + 20 && receiver_input[4] > center_channel_4 - 20)  zero |= 0b00001000;
-    
-    if(receiver_input[1] < low_channel_1) low_channel_1 = receiver_input[1];
-    if(receiver_input[2] < low_channel_2) low_channel_2 = receiver_input[2];
-    if(receiver_input[3] < low_channel_3) low_channel_3 = receiver_input[3];
-    if(receiver_input[4] < low_channel_4) low_channel_4 = receiver_input[4];
-    
-    if(receiver_input[1] > high_channel_1)  high_channel_1 = receiver_input[1];
-    if(receiver_input[2] > high_channel_2)  high_channel_2 = receiver_input[2];
-    if(receiver_input[3] > high_channel_3)  high_channel_3 = receiver_input[3];
-    if(receiver_input[4] > high_channel_4)  high_channel_4 = receiver_input[4];
-    
+  while (zero < 15) {
+    if (receiver_input[1] < center_channel_1 + 20 && receiver_input[1] > center_channel_1 - 20)  zero |= 0b00000001;
+    if (receiver_input[2] < center_channel_2 + 20 && receiver_input[2] > center_channel_2 - 20)  zero |= 0b00000010;
+    if (receiver_input[3] < center_channel_3 + 20 && receiver_input[3] > center_channel_3 - 20)  zero |= 0b00000100;
+    if (receiver_input[4] < center_channel_4 + 20 && receiver_input[4] > center_channel_4 - 20)  zero |= 0b00001000;
+
+    if (receiver_input[1] < low_channel_1) low_channel_1 = receiver_input[1];
+    if (receiver_input[2] < low_channel_2) low_channel_2 = receiver_input[2];
+    if (receiver_input[3] < low_channel_3) low_channel_3 = receiver_input[3];
+    if (receiver_input[4] < low_channel_4) low_channel_4 = receiver_input[4];
+
+    if (receiver_input[1] > high_channel_1)  high_channel_1 = receiver_input[1];
+    if (receiver_input[2] > high_channel_2)  high_channel_2 = receiver_input[2];
+    if (receiver_input[3] > high_channel_3)  high_channel_3 = receiver_input[3];
+    if (receiver_input[4] > high_channel_4)  high_channel_4 = receiver_input[4];
+
     delay(100);
   }
-  
+
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("High, low and center values found during setup"));
@@ -205,10 +191,10 @@ void register_min_max(){
   Serial.println(high_channel_4);
 }
 
-void record_center_position(){
+void record_center_position() {
   delay(2000);
   Serial.println(F("Place all sticks in the center position within 10 seconds."));
-  for(int i = 9; i > 0; i--)  {
+  for (int i = 9; i > 0; i--)  {
     delay(1000);
     Serial.print(i);
     Serial.print(" ");
@@ -233,23 +219,23 @@ void record_center_position(){
   Serial.println(receiver_input[4]);
   Serial.println(F(""));
   Serial.println(F(""));
-  
+
   delay(2000);
 }
 
-void wait_for_receiver(){
+void wait_for_receiver() {
   Serial.println("Turn on your transmitter in the next 10 seconds.");
   byte zero = 0;
   timer = millis() + 10000;
-  while(timer > millis() && zero < 15)  {
-    if(receiver_input[1] < 2100 && receiver_input[1] > 900)zero |= 0b00000001;
-    if(receiver_input[2] < 2100 && receiver_input[2] > 900)zero |= 0b00000010;
-    if(receiver_input[3] < 2100 && receiver_input[3] > 900)zero |= 0b00000100;
-    if(receiver_input[4] < 2100 && receiver_input[4] > 900)zero |= 0b00001000;
+  while (timer > millis() && zero < 15)  {
+    if (receiver_input[1] < 2100 && receiver_input[1] > 900)zero |= 0b00000001;
+    if (receiver_input[2] < 2100 && receiver_input[2] > 900)zero |= 0b00000010;
+    if (receiver_input[3] < 2100 && receiver_input[3] > 900)zero |= 0b00000100;
+    if (receiver_input[4] < 2100 && receiver_input[4] > 900)zero |= 0b00001000;
     delay(500);
     Serial.print(F("."));
   }
-  if(zero == 0)  {
+  if (zero == 0)  {
     error = 1;
     Serial.println(F("."));
     Serial.println(F("No valid receiver signals found!"));
@@ -257,7 +243,6 @@ void wait_for_receiver(){
   else Serial.println(F(" OK"));
 }
 
-#ifdef MEGA_SETUP
 ISR(PCINT2_vect) {
   current_time = micros();
   //============================================= Channel 1 =============================================
@@ -356,66 +341,4 @@ ISR(PCINT2_vect) {
     receiver_input[8] = current_time - timer_8;                //Channel 8 is current_time - timer_8
   }
 }
-#endif
 
-#ifdef NANO_SETUP
-
-ISR(PCINT0_vect) {
-  current_time = micros();
-  //* ========================================= Channel 1 =========================================
-  if (PINB & B00000001) {                                                   //Is input 8 high?
-    if (last_channel_1 == 0) {                                              //Input 8 changed from 0 to 1.
-      last_channel_1 = 1;                                                   //Remember current input state.
-      timer_1 = current_time;                                               //Set timer_1 to current_time.
-    }
-  }
-  else if (last_channel_1 == 1) {                                           //Input 8 is not high and changed from 1 to 0.
-    last_channel_1 = 0;                                                     //Remember current input state.
-    receiver_input[1] = current_time - timer_1;                             //Channel 1 is current_time - timer_1.
-  }
-  //* ========================================= Channel 2 =========================================
-  if (PINB & B00000010) {                                                  //Is input 9 high?
-    if (last_channel_2 == 0) {                                              //Input 9 changed from 0 to 1.
-      last_channel_2 = 1;                                                   //Remember current input state.
-      timer_2 = current_time;                                               //Set timer_2 to current_time.
-    }
-  }
-  else if (last_channel_2 == 1) {                                           //Input 9 is not high and changed from 1 to 0.
-    last_channel_2 = 0;                                                     //Remember current input state.
-    receiver_input[2] = current_time - timer_2;                             //Channel 2 is current_time - timer_2.
-  }
-  //* ========================================= Channel 3 =========================================
-  if (PINB & B00000100) {                                                  //Is input 10 high?
-    if (last_channel_3 == 0) {                                              //Input 10 changed from 0 to 1.
-      last_channel_3 = 1;                                                   //Remember current input state.
-      timer_3 = current_time;                                               //Set timer_3 to current_time.
-    }
-  }
-  else if (last_channel_3 == 1) {                                           //Input 10 is not high and changed from 1 to 0.
-    last_channel_3 = 0;                                                     //Remember current input state.
-    receiver_input[3] = current_time - timer_3;                             //Channel 3 is current_time - timer_3.
-  }
-  //* ========================================= Channel 4 =========================================
-  if (PINB & B00001000) {                                                  //Is input 11 high?
-    if (last_channel_4 == 0) {                                              //Input 11 changed from 0 to 1.
-      last_channel_4 = 1;                                                   //Remember current input state.
-      timer_4 = current_time;                                               //Set timer_4 to current_time.
-    }
-  }
-  else if (last_channel_4 == 1) {                                           //Input 11 is not high and changed from 1 to 0.
-    last_channel_4 = 0;                                                     //Remember current input state.
-    receiver_input[4] = current_time - timer_4;                             //Channel 4 is current_time - timer_4.
-  }
-  //* ========================================= Channel 5 =========================================
-  if (PINB & B00010000) {                                                  //Is input 11 high?
-    if (last_channel_5 == 0) {                                              //Input 11 changed from 0 to 1.
-      last_channel_5 = 1;                                                   //Remember current input state.
-      timer_5 = current_time;                                               //Set timer_4 to current_time.
-    }
-  }
-  else if (last_channel_5 == 1) {                                           //Input 11 is not high and changed from 1 to 0.
-    last_channel_5 = 0;                                                     //Remember current input state.
-    receiver_input[5] = current_time - timer_5;                             //Channel 4 is current_time - timer_4.
-  }
-}
-#endif 

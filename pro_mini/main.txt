@@ -1,6 +1,8 @@
 #include <Wire.h>
 #include <EEPROM.h>
 
+#define PRO_MINI_ADDR 8
+
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.8;  //Gain setting for the roll P-controller
 float pid_i_gain_roll = 0.0;  //Gain setting for the roll I-controller
@@ -23,7 +25,7 @@ int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 //Misc. variables
 int start;
 int difference, main_loop_timer;
-byte eeprom_data[50];
+byte eeprom_data[27];
 byte page_number = 0;
 bool screen_free = false;
 
@@ -32,7 +34,7 @@ int receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
     receiver_input_channel_3 = 0, receiver_input_channel_4 = 0;
 
 //IMU variables
-double gyro_cal[4], accel_cal[6];
+double gyro_cal[4];
 double acc_cal_roll, acc_cal_pitch;
 
 long acc_x, acc_y, acc_z, acc_total_vector;
@@ -50,16 +52,16 @@ float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, p
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
 typedef union {
-  double decimal;
-  uint8_t bytes[4];
+  int integer;
+  byte one_byte;
+  uint8_t two_bytes[2];
 } converter;
-
-converter number;
 
 void setup () {
   Serial.begin(115200);
-  Wire.begin();
+  Wire.begin(9);
   TWBR = 12;
+  Wire.onReceive(receive_event);
 
   pinMode(13, OUTPUT);
   digitalWrite(13, HIGH);
@@ -67,18 +69,10 @@ void setup () {
   digitalWrite(SDA, LOW);
   digitalWrite(SCL, LOW);
 
-  for (start = 0; start <= 50; start++)
+  for (start = 0; start <= 26; start++)
     eeprom_data[start] = EEPROM.read(start);
-  while (eeprom_data[48] != 'J' || eeprom_data[49] != 'M' || eeprom_data[50] != 'B')
+  while (eeprom_data[24] != 'J' || eeprom_data[25] != 'M' || eeprom_data[26] != 'B')
     delay(10);
-
-  for (int i = 0; i < 6; i++) {
-    number.bytes[0] = eeprom_data[i * 4 + 24];
-    number.bytes[1] = eeprom_data[i * 4 + 25];
-    number.bytes[2] = eeprom_data[i * 4 + 26];
-    number.bytes[3] = eeprom_data[i * 4 + 27];
-    accel_cal[i] = number.decimal;
-  }
 
   PCICR |= (1 << PCIE0);                                                    //Set PCIE0 to enable PCMSK0 scan.
   PCMSK0 |= (1 << PCINT0);                                                  //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
@@ -89,7 +83,17 @@ void setup () {
 
   DDRD |= B11110000;
 
-  Serial.println("Welcome to flight controller setup!");
+  for (int i = 10; i > 0; i--) {
+    Serial.print(i);
+    Serial.print(" ");
+    delay(1000);
+  }
+  Serial.println("start");
+
+  Wire.beginTransmission(PRO_MINI_ADDR);
+  Wire.write(1);
+  Wire.endTransmission();
+
   Serial.println("Turn on your transmitter and place throttle at lowest position!");
   while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
     receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
@@ -109,6 +113,10 @@ void setup () {
   start = 0;
   Serial.println("Transmitter detected!");
 
+  Wire.beginTransmission (PRO_MINI_ADDR);
+  Wire.write(2);
+  Wire.endTransmission();
+
   setupSensor();
   calibrateSensors();
   digitalWrite(13, LOW);
@@ -117,17 +125,34 @@ void setup () {
   Serial.println("Battery left: " + (String) battery);
   Serial.println("Setup DONE!");
 
+  Wire.beginTransmission (PRO_MINI_ADDR);
+  Wire.write(3);
+  Wire.endTransmission();
+
   for (int i = 3; i > 0; i--) {
     Serial.print((String) i + " ");
     delay(1000);
     pulse_esc();
   }
+  Wire.beginTransmission (PRO_MINI_ADDR);
+  Wire.write(4);
+  Wire.endTransmission();
+  
+  delay(1000);
 }
 
 void loop () {
   convert_transmitter_values();
 
+  Wire.beginTransmission (PRO_MINI_ADDR);
+  Wire.write(true);
+  Wire.endTransmission();
+
   calculate_pitch_roll();
+
+  Wire.beginTransmission (PRO_MINI_ADDR);
+  Wire.write(false);
+  Wire.endTransmission();
 
   check_start_stop();
 
@@ -138,6 +163,8 @@ void loop () {
   calculate_esc_output();
 
   set_escs();
+
+  display_data();
 
   maintain_loop_time();
 }
@@ -189,6 +216,45 @@ int calculate_battery() {
   return battery_voltage;
 }
 
+void display_data() {
+  if (!screen_free) return;
+
+  converter number;
+  switch (page_number) {
+    case 1:   //Total bytes transfered: 4
+      int data[4];
+      data[0] = receiver_input_channel_1 / 10;
+      data[1] = receiver_input_channel_2 / 10;
+      data[2] = receiver_input_channel_3 / 10;
+      data[3] = receiver_input_channel_4 / 10;
+
+      Wire.beginTransmission(PRO_MINI_ADDR);
+      for (int i = 0; i < 4; i++) {
+        number.integer = data[i];
+        Wire.write(number.one_byte);
+      }
+      Wire.endTransmission();
+      break;
+    case 2:   //Total bytes transfered: 4
+      number.integer = angle_roll * 100;
+      Wire.beginTransmission(PRO_MINI_ADDR);
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      number.integer = angle_pitch * 100;
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      Wire.endTransmission();
+      break;
+    case 3:   //Total bytes transfered: 2
+      number.integer = calculate_battery();
+      Wire.beginTransmission(PRO_MINI_ADDR); // transmit to device #8
+      Wire.write(number.two_bytes[0]);
+      Wire.write(number.two_bytes[1]);
+      Wire.endTransmission();
+      break;
+  }
+}
+
 void maintain_loop_time () {
   difference = micros() - main_loop_timer;
   while (difference < 5000) {
@@ -205,3 +271,13 @@ void pulse_esc() {
   delay(3);                                               //Wait 3 milliseconds before the next loop.
 }
 
+void receive_event(int bytes) {
+  if (bytes == 2) {
+    while (Wire.available() < 2);
+    screen_free = Wire.read();
+    page_number = Wire.read();
+  } else {
+    while (Wire.available() < 1);
+    screen_free = Wire.read();
+  }
+}
