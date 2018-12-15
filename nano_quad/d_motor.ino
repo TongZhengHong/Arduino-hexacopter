@@ -10,23 +10,23 @@ void calculate_esc_output () {
   throttle = receiver_input_channel_3;                                      //We need the throttle signal as a base signal.
 
   if (start == 2) {                                                         //The motors are started.
-    if (throttle > 1850) throttle = 1850;                                   //We need some room to keep full control at full throttle.
+    if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
     esc_1 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
     esc_2 = throttle + pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
     esc_3 = throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
     esc_4 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw ;//Calculate the pulse for esc 4 (front-left - CW)
 
-    if (battery_voltage < 840 && battery_voltage > 750) {                  //Is the battery connected?
-      esc_1 += esc_1 * ((840 - battery_voltage) / (float)3500);            //Compensate the esc-1 pulse for voltage drop.
-      esc_2 += esc_2 * ((840 - battery_voltage) / (float)3500);            //Compensate the esc-2 pulse for voltage drop.
-      esc_3 += esc_3 * ((840 - battery_voltage) / (float)3500);            //Compensate the esc-3 pulse for voltage drop.
-      esc_4 += esc_4 * ((840 - battery_voltage) / (float)3500);            //Compensate the esc-4 pulse for voltage drop.
+    if (battery_voltage < 1680 && battery_voltage > 1280) {                  //Is the battery connected?
+      esc_1 += esc_1 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-1 pulse for voltage drop.
+      esc_2 += esc_2 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-2 pulse for voltage drop.
+      esc_3 += esc_3 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-3 pulse for voltage drop.
+      esc_4 += esc_4 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-4 pulse for voltage drop.
     }
 
-    if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
-    if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
-    if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
-    if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+    if (esc_1 < 1110) esc_1 = 1110;                                         //Keep the motors running.
+    if (esc_2 < 1110) esc_2 = 1110;                                         //Keep the motors running.
+    if (esc_3 < 1110) esc_3 = 1110;                                         //Keep the motors running.
+    if (esc_4 < 1110) esc_4 = 1110;                                         //Keep the motors running.
 
     if (esc_1 > 2000) esc_1 = 2000;                                          //Limit the esc-1 pulse to 2000us.
     if (esc_2 > 2000) esc_2 = 2000;                                          //Limit the esc-2 pulse to 2000us.

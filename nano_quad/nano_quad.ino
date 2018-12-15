@@ -35,9 +35,17 @@ int receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
 double gyro_cal[4], accel_cal[6];
 double acc_cal_roll, acc_cal_pitch;
 
-long acc_x, acc_y, acc_z, acc_total_vector;
-float temperature;
-float gyro_roll, gyro_pitch, gyro_yaw;
+int acc_x_raw, acc_y_raw, acc_z_raw;
+int gyro_x_raw, gyro_y_raw, gyro_z_raw;
+int temperature;
+
+int acc_x_mem[16], acc_y_mem[16], acc_z_mem[16];
+int gyro_x_mem[8], gyro_y_mem[8], gyro_z_mem[8];
+long acc_x_sum, acc_y_sum, acc_z_sum, gyro_x_sum, gyro_y_sum, gyro_z_sum;
+byte gyro_loop_counter = 0, acc_loop_counter = 0;
+
+long acc_x, acc_y, acc_z;
+float gyro_x, gyro_y, gyro_z;
 
 float angle_roll, angle_pitch;
 float angle_roll_acc, angle_pitch_acc;
@@ -113,15 +121,18 @@ void setup () {
   calibrateSensors();
   digitalWrite(13, LOW);
 
-  int battery = calculate_battery();
-  Serial.println("Battery left: " + (String) battery);
-  Serial.println("Setup DONE!");
-
-  for (int i = 3; i > 0; i--) {
+  Serial.print("Connect your battery in: ");
+  for (int i = 5; i > 0; i--) {
     Serial.print((String) i + " ");
     delay(1000);
     pulse_esc();
   }
+  Serial.println();
+  int battery = calculate_battery();
+  Serial.println("Battery left: " + (String) battery);
+  Serial.println("Setup DONE!");
+
+  delay(2000);
 }
 
 void loop () {
@@ -180,11 +191,12 @@ void check_start_stop() {
 
 int calculate_battery() {
   float diodeForward = 0.5;
-  int potDivider = 167;
+  float reading_error = 0.3;
+  float potDivider = 3.546; // 1 / (22/(22+56))
 
   int sensorValue = analogRead(A0);
   float voltage = sensorValue * (5.0 / 1023);
-  int battery_voltage = (voltage + diodeForward) * potDivider;
+  int battery_voltage = 100 * ((voltage - reading_error) * potDivider + diodeForward);
 
   return battery_voltage;
 }

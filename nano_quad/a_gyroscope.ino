@@ -85,49 +85,49 @@ void calibrate_accel() {
   Wire.requestFrom(imu_address, 14);                                     //Request 14 bytes from the gyro.
 
   while (Wire.available() < 14);                                          //Wait until the 14 bytes are received.
-  acc_x = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
-  acc_y = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
-  acc_z = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
+  acc_x_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
+  acc_y_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
+  acc_z_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
   temperature = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the temperature variable.
-  gyro_roll = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_pitch = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_yaw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_x_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_y_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_z_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
 
-  gyro_roll -= gyro_cal[1];
-  gyro_pitch -= gyro_cal[2];
-  gyro_yaw -= gyro_cal[3];
+  gyro_x_raw -= gyro_cal[1];
+  gyro_y_raw -= gyro_cal[2];
+  gyro_z_raw -= gyro_cal[3];
 
-  gyro_roll *= -1;
-  //gyro_pitch *= -1;
-  gyro_yaw *= -1;
+  gyro_x_raw *= -1;
+  //gyro_y_raw *= -1;
+  gyro_z_raw *= -1;
 
-  acc_x *= -1;
-  //acc_y *= -1;
-  acc_z *= -1;
+  acc_x_raw *= -1;
+  //acc_y_raw *= -1;
+  acc_z_raw *= -1;
 
-  acc_x = accel_cal[0] * acc_x + accel_cal[1];
-  acc_y = accel_cal[2] * acc_y + accel_cal[3];
-  acc_z = accel_cal[4] * acc_z + accel_cal[5];
+  acc_x_raw = accel_cal[0] * acc_x_raw + accel_cal[1];
+  acc_y_raw = accel_cal[2] * acc_y_raw + accel_cal[3];
+  acc_z_raw = accel_cal[4] * acc_z_raw + accel_cal[5];
 
   //Gyro calculations 0.000076336 = (0.005 / 65.5)
-  angle_pitch += gyro_pitch * 0.000076336;
-  angle_roll += gyro_roll * 0.000076336;
+  angle_roll += gyro_x_raw * 0.000076336;
+  angle_pitch += gyro_y_raw * 0.000076336;
 
-  angle_pitch_acc = (float) (atan2(acc_z, acc_x)) * 57.296;
-  angle_roll_acc = (float) (atan2(acc_y, acc_z)) * 57.296;
+  angle_roll_acc = (float) (atan2(acc_y_raw, acc_z_raw)) * 57.296;
+  angle_pitch_acc = (float) (atan2(acc_z_raw, acc_x_raw)) * 57.296;
 
   angle_pitch_acc += (float) 90.0;
   if (angle_roll_acc > 90) angle_roll_acc -= (float) 180;
   else angle_roll_acc += (float) 180;
 
-  angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
   angle_roll = angle_roll * 0.96 + angle_roll_acc * 0.04;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
+  angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
 }
 
 void calculate_pitch_roll() {
-  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_roll / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_pitch / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_yaw / 65.5) * 0.3);         //Gyro pid input is deg/sec.
+  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_x / 65.5) * 0.3);     //Gyro pid input is deg/sec.
+  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_y / 65.5) * 0.3);     //Gyro pid input is deg/sec.
+  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_z / 65.5) * 0.3);         //Gyro pid input is deg/sec.
 
   Wire.beginTransmission(imu_address);                                   //Start communication with the gyro.
   Wire.write(0x3B);                                                       //Start reading @ register 3Bh and auto increment with every read.
@@ -135,53 +135,94 @@ void calculate_pitch_roll() {
   Wire.requestFrom(imu_address, 14);                                     //Request 14 bytes from the gyro.
 
   while (Wire.available() < 14);                                          //Wait until the 14 bytes are received.
-  acc_x = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
-  acc_y = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
-  acc_z = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
+  acc_x_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_x variable.
+  acc_y_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_y variable.
+  acc_z_raw = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the acc_z variable.
   temperature = Wire.read() << 8 | Wire.read();                           //Add the low and high byte to the temperature variable.
-  gyro_roll = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_pitch = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-  gyro_yaw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_x_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_y_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
+  gyro_z_raw = Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
 
-  gyro_roll -= gyro_cal[1];
-  gyro_pitch -= gyro_cal[2];
-  gyro_yaw -= gyro_cal[3];
+  gyro_x_raw -= gyro_cal[1];
+  gyro_y_raw -= gyro_cal[2];
+  gyro_z_raw -= gyro_cal[3];
 
-  gyro_roll *= -1;
-  //gyro_pitch *= -1;
-  gyro_yaw *= -1;
+  gyro_x_raw *= -1;
+  //gyro_y_raw *= -1;
+  gyro_z_raw *= -1;
 
-  acc_x *= -1;
-  //acc_y *= -1;
-  acc_z *= -1;
+  acc_x_raw *= -1;
+  //acc_y_raw *= -1;
+  acc_z_raw *= -1;
+
+  calculate_moving_average();
 
   acc_x = accel_cal[0] * acc_x + accel_cal[1];
   acc_y = accel_cal[2] * acc_y + accel_cal[3];
   acc_z = accel_cal[4] * acc_z + accel_cal[5];
 
   //Gyro calculations 0.000076336 = (0.005 / 65.5)
-  angle_pitch += gyro_pitch * 0.000076336;
-  angle_roll += gyro_roll * 0.000076336;
+  angle_roll += gyro_x * 0.000076336;
+  angle_pitch += gyro_y * 0.000076336;
 
   //Accelerometer angle calculations
-  angle_pitch_acc = (float) (atan2(acc_z, acc_x)) * 57.296;
   angle_roll_acc = (float) (atan2(acc_y, acc_z)) * 57.296;
+  angle_pitch_acc = (float) (atan2(acc_z, acc_x)) * 57.296;
 
   angle_pitch_acc += (float) 90.0;
   if (angle_roll_acc > 90) angle_roll_acc -= (float) 180;
   else angle_roll_acc += (float) 180;
 
   //Place the MPU-6050 spirit level and note the values in the following two lines for calibration.
-  angle_pitch_acc -= acc_cal_pitch; //2.7;                                                   //Accelerometer calibration value for pitch.
   angle_roll_acc -= acc_cal_roll; //1.8;                                                    //Accelerometer calibration value for roll.
+  angle_pitch_acc -= acc_cal_pitch; //2.7;                                                   //Accelerometer calibration value for pitch.
 
-  angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
   angle_roll = angle_roll * 0.96 + angle_roll_acc * 0.04;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
+  angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
 
-  pitch_level_adjust = angle_pitch * 15;                                    //Calculate the pitch angle correction
   roll_level_adjust = angle_roll * 15;                                      //Calculate the roll angle correction
+  pitch_level_adjust = angle_pitch * 15;                                    //Calculate the pitch angle correction
 
-  Serial.print(angle_pitch);
-  Serial.print(" ");
-  Serial.println(angle_roll);
+  Serial.print(angle_roll);
+  Serial.print(",");
+  Serial.println(angle_pitch);
 }
+
+void calculate_moving_average() {
+  gyro_x_sum += gyro_x_raw;
+  gyro_x_sum -= gyro_x_mem[gyro_loop_counter];
+  gyro_x_mem[gyro_loop_counter] = gyro_x_raw;
+  gyro_x = gyro_x_sum / 8.0;
+
+  gyro_y_sum += gyro_y_raw;
+  gyro_y_sum -= gyro_y_mem[gyro_loop_counter];
+  gyro_y_mem[gyro_loop_counter] = gyro_y_raw;
+  gyro_y = gyro_y_sum / 8.0;
+
+  gyro_z_sum += gyro_z_raw;
+  gyro_z_sum -= gyro_z_mem[gyro_loop_counter];
+  gyro_z_mem[gyro_loop_counter] = gyro_z_raw;
+  gyro_z = gyro_z_sum / 8.0;
+
+  acc_x_sum += acc_x_raw;
+  acc_x_sum -= acc_x_mem[acc_loop_counter];
+  acc_x_mem[acc_loop_counter] = acc_x_raw;
+  acc_x = acc_x_sum / 16.0;
+
+  acc_y_sum += acc_y_raw;
+  acc_y_sum -= acc_y_mem[acc_loop_counter];
+  acc_y_mem[acc_loop_counter] = acc_y_raw;
+  acc_y = acc_y_sum / 16.0;
+
+  acc_z_sum += acc_z_raw;
+  acc_z_sum -= acc_z_mem[acc_loop_counter];
+  acc_z_mem[acc_loop_counter] = acc_z_raw;
+  acc_z = acc_z_sum / 16.0;
+
+  if (gyro_loop_counter == 7) gyro_loop_counter = 0;
+  else gyro_loop_counter++;
+
+  if (acc_loop_counter == 15) acc_loop_counter = 0;
+  else acc_loop_counter++;
+}
+

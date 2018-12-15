@@ -20,9 +20,9 @@ void set_pid_offsets() {
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  {
     if (receiver_input_channel_2 > 1508)
-      pid_pitch_setpoint = receiver_input_channel_2 - 1508;
+      pid_pitch_setpoint = 1508 - receiver_input_channel_2;
     else if (receiver_input_channel_2 < 1492)
-      pid_pitch_setpoint = receiver_input_channel_2 - 1492;
+      pid_pitch_setpoint = 1492 - receiver_input_channel_2;
 
     pid_pitch_setpoint -= pitch_level_adjust; //Subtract the angle correction from the standardized receiver pitch input value.
     pid_pitch_setpoint /= 3.0;                //Divide the setpoint for the PID pitch controller by 3 to get angles in degrees.
@@ -84,6 +84,7 @@ void calculate_pid() {
 
   pid_last_yaw_d_error = pid_error_temp;
   
+//  Serial.print(" ");
 //  Serial.println(pid_output_roll);
 //  Serial.println(pid_output_pitch);
 //  Serial.println(pid_output_yaw);
