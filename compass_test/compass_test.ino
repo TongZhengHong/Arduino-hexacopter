@@ -1,3 +1,71 @@
+#include <Wire.h>
+#include <EEPROM.h>
+
+#define imu_address 0x68
+#define mag_address 0x76
+
+byte eeprom_data[50];
+unsigned long difference, main_loop_timer;
+
+double gyro_cal[4], accel_cal[6];
+double acc_cal_roll, acc_cal_pitch;
+
+int mag_x_raw, mag_y_raw, mag_z_raw;
+int acc_x_raw, acc_y_raw, acc_z_raw;
+int gyro_x_raw, gyro_y_raw, gyro_z_raw;
+int temperature;
+
+int acc_x_mem[16], acc_y_mem[16], acc_z_mem[16];
+int gyro_x_mem[8], gyro_y_mem[8], gyro_z_mem[8];
+long acc_x_sum, acc_y_sum, acc_z_sum, gyro_x_sum, gyro_y_sum, gyro_z_sum;
+byte gyro_loop_counter = 0, acc_loop_counter = 0;
+
+long acc_x, acc_y, acc_z;
+float gyro_x, gyro_y, gyro_z;
+
+int roll, pitch;
+float angle_roll, angle_pitch;
+float angle_roll_acc, angle_pitch_acc;
+
+typedef union {
+  double decimal;
+  uint8_t bytes[4];
+} converter;
+
+converter number;
+
+void setup() {
+  Wire.begin();
+  Serial.begin(115200);
+
+  for (int start = 0; start <= 50; start++)
+    eeprom_data[start] = EEPROM.read(start);
+  while (eeprom_data[48] != 'J' || eeprom_data[49] != 'M' || eeprom_data[50] != 'B')
+    delay(10);
+
+  for (int i = 0; i < 6; i++) {
+    number.bytes[0] = eeprom_data[i * 4 + 24];
+    number.bytes[1] = eeprom_data[i * 4 + 25];
+    number.bytes[2] = eeprom_data[i * 4 + 26];
+    number.bytes[3] = eeprom_data[i * 4 + 27];
+    accel_cal[i] = number.decimal;
+  }
+
+  //setup_sensor();
+  //calibrate_sensors();
+
+  Serial.println("Setup DONE");
+  delay(3000);
+}
+
+void loop() {
+  calculate_pitch_roll();
+
+  calculate_heading();
+
+  maintain_loop_time();
+}
+
 void setup_sensor() {
   Wire.beginTransmission(imu_address);                                      //Start communication with the address found during search.
   Wire.write(0x6B);                                                          //We want to write to the PWR_MGMT_1 register (6B hex)
@@ -50,8 +118,6 @@ void calibrate_sensors() {
     gyro_cal[1] += Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
     gyro_cal[2] += Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
     gyro_cal[3] += Wire.read() << 8 | Wire.read();                          //Read high and low part of the angular data.
-
-    pulse_esc();
   }
 
   gyro_cal[1] /= 2000;
@@ -69,7 +135,6 @@ void calibrate_sensors() {
     acc_cal_pitch += angle_pitch;
     acc_cal_roll += angle_roll;
 
-    pulse_esc();
     maintain_loop_time();
   }
   acc_cal_pitch /= 2000;
@@ -128,10 +193,6 @@ void calibrate_accel() {
 }
 
 void calculate_pitch_roll() {
-  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_x / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_y / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_z / 65.5) * 0.3);         //Gyro pid input is deg/sec.
-
   Wire.beginTransmission(imu_address);                                   //Start communication with the gyro.
   Wire.write(0x3B);                                                       //Start reading @ register 3Bh and auto increment with every read.
   Wire.endTransmission();                                                 //End the transmission.
@@ -180,18 +241,12 @@ void calculate_pitch_roll() {
   angle_roll_acc -= acc_cal_roll; //1.8;                                                    //Accelerometer calibration value for roll.
   angle_pitch_acc -= acc_cal_pitch; //2.7;                                                   //Accelerometer calibration value for pitch.
 
-  angle_roll = angle_roll * 0.96 + angle_roll_acc * 0.04;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
-  angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
+  roll = angle_roll * 0.96 + angle_roll_acc * 0.04;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
+  pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
 
-  roll = angle_roll;
-  pitch = angle_pitch;
-
-  roll_level_adjust = roll * 15;                                      //Calculate the roll angle correction
-  pitch_level_adjust = pitch * 15;                                    //Calculate the pitch angle correction
-
-//  Serial.print(roll);
-//  Serial.print(",");
-//  Serial.println(pitch);
+  //  Serial.print(roll);
+  //  Serial.print(",");
+  //  Serial.println(pitch);
 }
 
 void calculate_moving_average() {
@@ -230,5 +285,46 @@ void calculate_moving_average() {
 
   if (acc_loop_counter == 15) acc_loop_counter = 0;
   else acc_loop_counter++;
+}
+
+void maintain_loop_time () {
+  difference = micros() - main_loop_timer;
+  while (difference < 5000) {
+    difference = micros() - main_loop_timer;
+  }
+  //Serial.println(difference);
+  main_loop_timer = micros();
+}
+
+void calculate_heading() {
+  byte data[6];
+
+  //  Wire.beginTransmission(mag_address);                                   //Start communication with the gyro.
+  //  Wire.write(0x03);                                                       //Start reading @ register 3Bh and auto increment with every read.
+  //  Wire.endTransmission();                                                 //End the transmission.
+  //  Wire.requestFrom(mag_address, 6);                                     //Request 14 bytes from the gyro.
+  //
+  //  while(Wire.available() < 6);
+  //  for(int i = 0; i < 6; i++) data[i] = Wire.read();
+  //  mag_x_raw = data[1] << 8 | data[0];
+  //  mag_y_raw = data[3] << 8 | data[2];
+  //  mag_z_raw = data[5] << 8 | data[4];
+
+  for (int i = 0; i < 6; i++) {
+    Wire.beginTransmission(mag_address);
+    Wire.write((3 + i));
+    Wire.endTransmission();
+    Wire.requestFrom(mag_address, 1);
+
+    if (Wire.available() == 1) data[i] = Wire.read();
+  }
+
+  mag_x_raw = ((data[1] * 256) + data[0]);
+  mag_y_raw = ((data[3] * 256) + data[2]);
+  mag_z_raw = ((data[5] * 256) + data[4]);
+
+  float mag_x = 0.15 * mag_x_raw;
+
+  Serial.println(mag_x_raw);
 }
 

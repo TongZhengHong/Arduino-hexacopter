@@ -1,8 +1,11 @@
 #include <Wire.h>
 #include <EEPROM.h>
 
-#define imu_address 0x68
-#define mag_address 0x76
+#define QUADCOPTER
+//#define HEXCOPTER
+
+#define GYRO_ADDR 0x6B
+#define ACC_ADDR 0x1D
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.4;  //Gain setting for the roll P-controller
@@ -11,11 +14,21 @@ float pid_d_gain_roll = 0.3;    //G ain setting for the roll D-controller
 int pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
 int pid_max_i_roll = 100;     //Eliminate I controller windup
 
+#ifdef QUADCOPTER
 float pid_p_gain_pitch = pid_p_gain_roll; //Gain setting for the pitch P-controller.
 float pid_i_gain_pitch = pid_i_gain_roll; //Gain setting for the pitch I-controller.
 float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-controller.
 int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
 int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+#endif
+
+#ifdef HEXCOPTER
+float pid_p_gain_pitch = 0.0; //Gain setting for the pitch P-controller.
+float pid_i_gain_pitch = 0.0; //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = 0.0; //Gain setting for the pitch D-controller.
+int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
+int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+#endif
 
 float pid_p_gain_yaw = 1.0;  //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
@@ -25,17 +38,17 @@ int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 
 //Misc. variables
 int start;
-int difference, main_loop_timer;
+unsigned long difference, main_loop_timer;
 byte eeprom_data[51];
 
 //Transmitter variables
 int receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
     receiver_input_channel_3 = 0, receiver_input_channel_4 = 0,
-    receiver_input_channel_5 = 0;
+    receiver_input_channel_5 = 0, receiver_input_channel_6 = 0;
 
 //IMU variables
-double gyro_cal[4], accel_cal[6];
-double acc_cal_roll, acc_cal_pitch;
+float gyro_cal[4], accel_cal[6];
+float acc_cal_roll, acc_cal_pitch;
 
 int acc_x_raw, acc_y_raw, acc_z_raw;
 int gyro_x_raw, gyro_y_raw, gyro_z_raw;
@@ -54,6 +67,14 @@ float angle_roll, angle_pitch;
 float angle_roll_acc, angle_pitch_acc;
 float roll_level_adjust, pitch_level_adjust;
 
+//Compass variables
+int mag_x_raw, mag_y_raw, mag_z_raw;
+float mag_x, mag_y, mag_z;
+float compass_x, compass_y;
+
+int prev_heading, heading;
+bool heading_hold = false;
+
 //PID variables
 float pid_error_temp;
 float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_last_roll_d_error;
@@ -61,22 +82,16 @@ float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, p
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
 typedef union {
-  double decimal;
+  float decimal;
   uint8_t bytes[4];
 } converter;
 
 converter number;
 
-void setup () {
+void setup() {
   Serial.begin(115200);
   Wire.begin();
   TWBR = 12;
-
-  pinMode(13, OUTPUT);
-  digitalWrite(13, HIGH);
-
-  digitalWrite(SDA, LOW);
-  digitalWrite(SCL, LOW);
 
   for (start = 0; start <= 50; start++)
     eeprom_data[start] = EEPROM.read(start);
@@ -91,14 +106,31 @@ void setup () {
     accel_cal[i] = number.decimal;
   }
 
-  PCICR |= (1 << PCIE0);                                                    //Set PCIE0 to enable PCMSK0 scan.
-  PCMSK0 |= (1 << PCINT0);                                                  //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT1);                                                  //Set PCINT1 (digital input 9)to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT2);                                                  //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT3);                                                  //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT4);                                                  //Set PCINT4 (digital input 11)to trigger an interrupt on state change.
+  attachInterrupt(digitalPinToInterrupt(14), receiver_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(15), receiver_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(16), receiver_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(17), receiver_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(22), receiver_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(23), receiver_change, CHANGE);
 
-  DDRD |= B11110000;
+  PORTD_PCR2 = (1 << 8); //configuring pin 7 as GPIO
+  PORTD_PCR3 = (1 << 8); //configuring pin 8 as GPIO
+  PORTD_PCR4 = (1 << 8); //configuring pin 6 as GPIO
+  PORTD_PCR7 = (1 << 8); //configuring pin 5 as GPIO
+
+#ifdef QUADCOPTER
+  GPIOD_PDDR |= 156; //0000 0000 0000 0000 0000 0000 1001 1100 --> Setting pins 5,6,7,8 as outputs
+#endif
+  
+#ifdef HEXCOPTER
+  PORTD_PCR5 = (1 << 8); //configuring pin 20 as GPIO
+  PORTD_PCR6 = (1 << 8); //configuring pin 21 as GPIO
+  GPIOD_PDDR |= 252; //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as outputs
+#endif
+
+  PORTC_PCR5 = (1 << 8);  //configuring LED pin as GPIO
+  GPIOC_PDDR = (1 << 5);  //configuring LED pin as an output
+  //GPIOC_PSOR = (1 << 5);  //setting LED pin high
 
   Serial.println("Welcome to flight controller setup!");
   Serial.println("Turn on your transmitter and place throttle at lowest position!");
@@ -138,12 +170,14 @@ void setup () {
   delay(2000);
 }
 
-void loop () {  
+void loop() {
   convert_transmitter_values();
+
+  check_start_stop();
 
   calculate_pitch_roll();
 
-  check_start_stop();
+  //calculate_heading();
 
   set_pid_offsets();
 
@@ -152,7 +186,7 @@ void loop () {
   calculate_esc_output();
 
   set_escs();
-
+  
   maintain_loop_time();
 }
 
@@ -176,7 +210,9 @@ void check_start_stop() {
 
       angle_pitch = angle_pitch_acc; //Set the gyro pitch angle equal to the accelerometer pitch angle when the quadcopter is started.
       angle_roll = angle_roll_acc;   //Set the gyro roll angle equal to the accelerometer roll angle when the quadcopter is started.
-
+      prev_heading = heading;
+      angle_yaw = heading;
+      
       //Reset the PID controllers
       pid_i_mem_roll = 0;
       pid_last_roll_d_error = 0;
@@ -204,6 +240,22 @@ int calculate_battery() {
   return battery_voltage;
 }
 
+void pulse_esc() {
+  #ifdef QUADCOPTER
+    GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
+    delayMicroseconds(1000);
+    GPIOD_PCOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as LOW
+    delay(3);
+  #endif
+
+  #ifdef HEXCOPTER
+    GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
+    delayMicroseconds(1000);
+    GPIOD_PCOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as LOW
+    delay(3);
+  #endif
+}
+
 void maintain_loop_time () {
   difference = micros() - main_loop_timer;
   while (difference < 5000) {
@@ -212,11 +264,3 @@ void maintain_loop_time () {
   //Serial.println(difference);
   main_loop_timer = micros();
 }
-
-void pulse_esc() {
-  PORTD |= B11110000;                                     //Sends 1000 pulse to ESCs to prevent them from beeping
-  delayMicroseconds(1000);
-  PORTD &= B00001111;
-  delay(3);                                               //Wait 3 milliseconds before the next loop.
-}
-
