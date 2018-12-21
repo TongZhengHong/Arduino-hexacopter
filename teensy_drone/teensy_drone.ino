@@ -11,68 +11,70 @@
 float pid_p_gain_roll = 0.4;  //Gain setting for the roll P-controller
 float pid_i_gain_roll = 0.001;  //Gain setting for the roll I-controller
 float pid_d_gain_roll = 0.3;    //G ain setting for the roll D-controller
-int pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
-int pid_max_i_roll = 100;     //Eliminate I controller windup
+uint16_t pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_roll = 100;     //Eliminate I controller windup
 
 #ifdef QUADCOPTER
 float pid_p_gain_pitch = pid_p_gain_roll; //Gain setting for the pitch P-controller.
 float pid_i_gain_pitch = pid_i_gain_roll; //Gain setting for the pitch I-controller.
 float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-controller.
-int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
-int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+uint16_t pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
 #endif
 
 #ifdef HEXCOPTER
 float pid_p_gain_pitch = 0.0; //Gain setting for the pitch P-controller.
 float pid_i_gain_pitch = 0.0; //Gain setting for the pitch I-controller.
 float pid_d_gain_pitch = 0.0; //Gain setting for the pitch D-controller.
-int pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
-int pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+uint16_t pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
 #endif
 
 float pid_p_gain_yaw = 1.0;  //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
 float pid_d_gain_yaw = 0.0;  //Gain setting for the pitch D-controller.
-int pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
 //Misc. variables
-int start;
-unsigned long difference, main_loop_timer;
-byte eeprom_data[51];
+uint8_t start;
+uint32_t difference, main_loop_timer;
+byte eeprom_data[75];
 
 //Transmitter variables
-int receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
-    receiver_input_channel_3 = 0, receiver_input_channel_4 = 0,
-    receiver_input_channel_5 = 0, receiver_input_channel_6 = 0;
+uint16_t receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
+         receiver_input_channel_3 = 0, receiver_input_channel_4 = 0,
+         receiver_input_channel_5 = 0, receiver_input_channel_6 = 0;
 
 //IMU variables
-float gyro_cal[4], accel_cal[6];
+float gyro_cal[4], accel_cal[6], mag_cal[6];
 float acc_cal_roll, acc_cal_pitch;
 
-int acc_x_raw, acc_y_raw, acc_z_raw;
-int gyro_x_raw, gyro_y_raw, gyro_z_raw;
-int temperature;
+int16_t acc_x_raw, acc_y_raw, acc_z_raw;
+int16_t gyro_x_raw, gyro_y_raw, gyro_z_raw;
 
-int acc_x_mem[16], acc_y_mem[16], acc_z_mem[16];
-int gyro_x_mem[8], gyro_y_mem[8], gyro_z_mem[8];
-long acc_x_sum, acc_y_sum, acc_z_sum, gyro_x_sum, gyro_y_sum, gyro_z_sum;
-byte gyro_loop_counter = 0, acc_loop_counter = 0;
+int16_t acc_x_mem[16], acc_y_mem[16], acc_z_mem[16];
+int16_t gyro_x_mem[8], gyro_y_mem[8], gyro_z_mem[8];
+int32_t acc_x_sum, acc_y_sum, acc_z_sum, gyro_x_sum, gyro_y_sum, gyro_z_sum;
+uint8_t gyro_loop_counter = 0, acc_loop_counter = 0;
 
-long acc_x, acc_y, acc_z;
+int32_t acc_x, acc_y, acc_z;
 float gyro_x, gyro_y, gyro_z;
 
-int roll, pitch;
-float angle_roll, angle_pitch;
+int16_t roll, pitch;
+float angle_roll, angle_pitch, angle_yaw;
 float angle_roll_acc, angle_pitch_acc;
 float roll_level_adjust, pitch_level_adjust;
 
 //Compass variables
-int mag_x_raw, mag_y_raw, mag_z_raw;
+int16_t mag_x_raw, mag_y_raw, mag_z_raw;
 float mag_x, mag_y, mag_z;
-float compass_x, compass_y;
+float compass_x, compass_y, compass_heading;
 
-int prev_heading, heading;
+float mag_x_offset, mag_y_offset, mag_z_offset;
+float mag_x_scale, mag_y_scale, mag_z_scale;
+
+float prev_heading, heading;
 bool heading_hold = false;
 
 //PID variables
@@ -89,13 +91,14 @@ typedef union {
 converter number;
 
 void setup() {
-  Serial.begin(115200);
   Wire.begin();
-  TWBR = 12;
+  Wire.setClock(400000);
+  Serial.begin(115200);
+  delay(2000);
 
-  for (start = 0; start <= 50; start++)
+  for (start = 0; start <= 74; start++)
     eeprom_data[start] = EEPROM.read(start);
-  while (eeprom_data[48] != 'J' || eeprom_data[49] != 'M' || eeprom_data[50] != 'B')
+  while (eeprom_data[72] != 'J' || eeprom_data[73] != 'M' || eeprom_data[74] != 'B')
     delay(10);
 
   for (int i = 0; i < 6; i++) {
@@ -104,6 +107,14 @@ void setup() {
     number.bytes[2] = eeprom_data[i * 4 + 26];
     number.bytes[3] = eeprom_data[i * 4 + 27];
     accel_cal[i] = number.decimal;
+  }
+
+  for (int i = 0; i < 6; i++) {
+    number.bytes[0] = eeprom_data[i * 4 + 48];
+    number.bytes[1] = eeprom_data[i * 4 + 49];
+    number.bytes[2] = eeprom_data[i * 4 + 50];
+    number.bytes[3] = eeprom_data[i * 4 + 51];
+    mag_cal[i] = number.decimal;
   }
 
   attachInterrupt(digitalPinToInterrupt(14), receiver_change, CHANGE);
@@ -121,7 +132,7 @@ void setup() {
 #ifdef QUADCOPTER
   GPIOD_PDDR |= 156; //0000 0000 0000 0000 0000 0000 1001 1100 --> Setting pins 5,6,7,8 as outputs
 #endif
-  
+
 #ifdef HEXCOPTER
   PORTD_PCR5 = (1 << 8); //configuring pin 20 as GPIO
   PORTD_PCR6 = (1 << 8); //configuring pin 21 as GPIO
@@ -152,22 +163,24 @@ void setup() {
   start = 0;
   Serial.println("Transmitter detected!");
 
+  delay(500);
+
   digitalWrite(13, HIGH);
   setup_sensor();
   calibrate_sensors();
   digitalWrite(13, LOW);
 
-  Serial.print("Connect your battery in: ");
-  for (int i = 5; i > 0; i--) {
-    Serial.print((String) i + " ");
-    delay(1000);
-    pulse_esc();
-  }
-  Serial.println();
-  Serial.println("Battery left: " + (String) calculate_battery());
-  Serial.println("Setup DONE!");
+  //  Serial.print("Connect your battery in: ");
+  //  for (int i = 5; i > 0; i--) {
+  //    Serial.print((String) i + " ");
+  //    delay(1000);
+  //    pulse_esc();
+  //  }
+  //  Serial.println();
+  //  Serial.println("Battery left: " + (String) calculate_battery());
+  //  Serial.println("Setup DONE!");
 
-  delay(2000);
+  delay(1000);
 }
 
 void loop() {
@@ -177,7 +190,7 @@ void loop() {
 
   calculate_pitch_roll();
 
-  //calculate_heading();
+  calculate_heading();
 
   set_pid_offsets();
 
@@ -186,7 +199,7 @@ void loop() {
   calculate_esc_output();
 
   set_escs();
-  
+
   maintain_loop_time();
 }
 
@@ -204,15 +217,14 @@ void check_start_stop() {
 
   //When yaw stick is back in the center position start the motors (step 2).
   if (receiver_input_channel_4 > 1450 && receiver_input_channel_1 < 1550 && receiver_input_channel_2 > 1450)  {
-    if (start == 1)    {
+    if (start == 1)  {
       Serial.println("START MOTORS");
       start = 2; //start motors
 
       angle_pitch = angle_pitch_acc; //Set the gyro pitch angle equal to the accelerometer pitch angle when the quadcopter is started.
       angle_roll = angle_roll_acc;   //Set the gyro roll angle equal to the accelerometer roll angle when the quadcopter is started.
       prev_heading = heading;
-      angle_yaw = heading;
-      
+
       //Reset the PID controllers
       pid_i_mem_roll = 0;
       pid_last_roll_d_error = 0;
@@ -241,19 +253,19 @@ int calculate_battery() {
 }
 
 void pulse_esc() {
-  #ifdef QUADCOPTER
-    GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
-    delayMicroseconds(1000);
-    GPIOD_PCOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as LOW
-    delay(3);
-  #endif
+#ifdef QUADCOPTER
+  GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
+  delayMicroseconds(1000);
+  GPIOD_PCOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as LOW
+  delay(3);
+#endif
 
-  #ifdef HEXCOPTER
-    GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
-    delayMicroseconds(1000);
-    GPIOD_PCOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as LOW
-    delay(3);
-  #endif
+#ifdef HEXCOPTER
+  GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
+  delayMicroseconds(1000);
+  GPIOD_PCOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as LOW
+  delay(3);
+#endif
 }
 
 void maintain_loop_time () {

@@ -7,7 +7,7 @@ void convert_transmitter_values() {
   receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-  
+
 //  Serial.print(receiver_input_channel_1);
 //  Serial.print(", ");
 //  Serial.print(receiver_input_channel_2);
@@ -51,7 +51,7 @@ void receiver_change() {
       last_channel_1 = 1;                                                   //Remember current input state.
       timer_1 = current_time;                                               //Set timer_1 to current_time.
     }
-  } else if (last_channel_1 == 1) {                                          //Input 14 is not high and changed from 1 to 0.
+  } else if (last_channel_1 == 1) {                                         //Input 14 is not high and changed from 1 to 0.
     last_channel_1 = 0;                                                     //Remember current input state.
     receiver_input[1] = current_time - timer_1;                             //Channel 1 is current_time - timer_1.
   }
@@ -91,7 +91,7 @@ void receiver_change() {
       last_channel_5 = 1;                                                   //Remember current input state.
       timer_5 = current_time;                                               //Set timer_5 to current_time.
     }
-  } else if (last_channel_4 == 1) {                                          //Input 22 is not high and changed from 1 to 0.
+  } else if (last_channel_5 == 1) {                                          //Input 22 is not high and changed from 1 to 0.
     last_channel_5 = 0;                                                     //Remember current input state.
     receiver_input[5] = current_time - timer_5;                             //Channel 5 is current_time - timer_5.
   }

@@ -1,46 +1,10 @@
-void setup_sensor() {
-  Wire.beginTransmission(GYRO_ADDR);      //GYROSCOPE
-  Wire.write(0x20);                       //Control register 1
-  Wire.write(0x4F);                       //Write 01001111 --> 190Hz, 12.5 cutoff, Power up
-  Wire.endTransmission();
-
-  Wire.beginTransmission(GYRO_ADDR);      //GYROSCOPE
-  Wire.write(0x23);                       //Control register 4
-  Wire.write(0x10);                       //Write 00010000 --> 500dps
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ACC_ADDR);       //ACCELEROMETER
-  Wire.write(0x20);                       //Control register 1
-  Wire.write(0x77);                       //Write 01110111 --> 200Hz, Power up
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ACC_ADDR);       //ACCELEROMETER
-  Wire.write(0x21);                       //Control register 2
-  Wire.write(0x18);                       //Write 00011000 --> +/- 8g
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
-  Wire.write(0x24);                       //Control register 5
-  Wire.write(0x74);                       //Write 01110100 --> Disable temp, high res, 100Hz
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
-  Wire.write(0x25);                       //Control register 6
-  Wire.write(0x40);                       //Write 01000000 -->  +/-8 gauss
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
-  Wire.write(0x26);                       //Control register 7
-  Wire.write(0x00);                       //Write 00000000 --> Continuous-conversion mode
-  Wire.endTransmission();
-}
 
 void calibrate_sensors() {
   Serial.print("Calibrating sensor");
   for (int i = 0; i < 2000; i++) {
     if (i % 200 == 0) Serial.print(".");
 
-    byte data[6];
+    uint8_t data[6];
     for (int i = 0; i < 6; i++) {
       Wire.beginTransmission(GYRO_ADDR);
       Wire.write((40 + i));
@@ -49,9 +13,13 @@ void calibrate_sensors() {
       if (Wire.available() == 1) data[i] = Wire.read();
     }
 
-    gyro_cal[1] += ((data[1] * 256) + data[0]);
-    gyro_cal[2] += ((data[3] * 256) + data[2]);
-    gyro_cal[3] += ((data[5] * 256) + data[4]);
+    gyro_x_raw = (int16_t) data[1] << 8 | (int16_t) data[0];
+    gyro_y_raw = (int16_t) data[3] << 8 | (int16_t) data[2];
+    gyro_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
+
+    gyro_cal[1] += gyro_x_raw;
+    gyro_cal[2] += gyro_y_raw;
+    gyro_cal[3] += gyro_z_raw;
   }
 
   gyro_cal[1] /= 2000;
@@ -63,8 +31,8 @@ void calibrate_sensors() {
   for (int i = 1; i < 4; i++) Serial.println(gyro_cal[i]);
 
   Serial.print("Calibrating accelerometer offsets");
-  for (int i = 0; i < 2000; i++) {
-    if (i % 200 == 0) Serial.print(".");
+  for (int i = 0; i < 1000; i++) {
+    if (i % 100 == 0) Serial.print(".");
     calibrate_accel();
     acc_cal_pitch += angle_pitch;
     acc_cal_roll += angle_roll;
@@ -72,8 +40,8 @@ void calibrate_sensors() {
     pulse_esc();
     maintain_loop_time();
   }
-  acc_cal_pitch /= 2000;
-  acc_cal_roll /= 2000;
+  acc_cal_pitch /= 1000;
+  acc_cal_roll /= 1000;
 
   Serial.println();
   Serial.println("Accelerometer offset calibration done!");
@@ -82,7 +50,7 @@ void calibrate_sensors() {
 }
 
 void calibrate_accel() {
-  unsigned int data[6];
+  uint8_t data[6];
   for (int i = 0; i < 6; i++) {
     Wire.beginTransmission(GYRO_ADDR);
     Wire.write((40 + i));
@@ -92,9 +60,9 @@ void calibrate_accel() {
     if (Wire.available() == 1) data[i] = Wire.read();
   }
 
-  gyro_x_raw = ((data[1] * 256) + data[0]);
-  gyro_y_raw = ((data[3] * 256) + data[2]);
-  gyro_z_raw = ((data[5] * 256) + data[4]);
+  gyro_x_raw = (int16_t) data[1] << 8 | (int16_t) data[0];
+  gyro_y_raw = (int16_t) data[3] << 8 | (int16_t) data[2];
+  gyro_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
 
   for (int i = 0; i < 6; i++) {
     Wire.beginTransmission(ACC_ADDR);
@@ -105,9 +73,9 @@ void calibrate_accel() {
     if (Wire.available() == 1) data[i] = Wire.read();
   }
 
-  acc_x_raw = ((data[1] * 256) + data[0]);
-  acc_y_raw = ((data[3] * 256) + data[2]);
-  acc_z_raw = ((data[5] * 256) + data[4]);
+  acc_x_raw = (int16_t) data[1] << 8 | (int16_t) data[0];
+  acc_y_raw = (int16_t) data[3] << 8 | (int16_t) data[2];
+  acc_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
 
   gyro_x_raw -= gyro_cal[1];
   gyro_y_raw -= gyro_cal[2];
@@ -126,18 +94,21 @@ void calibrate_accel() {
 
   angle_roll_acc = (float) (atan2(acc_z_raw, acc_x_raw)) * RAD_TO_DEG;
   angle_pitch_acc = (float) (atan2(acc_y_raw, acc_z_raw)) * RAD_TO_DEG;
-  angle_roll_acc -= (float) 90.0;
+  
+  angle_roll_acc = (float) -90.0 - angle_roll_acc;
+  if (angle_pitch_acc > 0) angle_pitch_acc = (float) 180.0 - angle_pitch_acc;
+  else angle_pitch_acc = (float) -180.0 - angle_pitch_acc;
 
   angle_roll = angle_roll * 0.96 + angle_roll_acc * 0.04;               //Correct the drift of the gyro roll angle with the accelerometer roll angle.
   angle_pitch = angle_pitch * 0.96 + angle_pitch_acc * 0.04;            //Correct the drift of the gyro pitch angle with the accelerometer pitch angle.
 }
 
 void calculate_pitch_roll() {
-  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_x / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_y / 65.5) * 0.3);     //Gyro pid input is deg/sec.
-  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_z / 65.5) * 0.3);         //Gyro pid input is deg/sec.
+  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_x * 0.0175) * 0.3);     //Gyro pid input is deg/sec.
+  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_y * 0.0175) * 0.3);     //Gyro pid input is deg/sec.
+  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_z * 0.0175) * 0.3);         //Gyro pid input is deg/sec.
 
-  unsigned int data[6];
+  uint8_t data[6];
   for (int i = 0; i < 6; i++) {
     Wire.beginTransmission(GYRO_ADDR);
     Wire.write((40 + i));
@@ -147,9 +118,9 @@ void calculate_pitch_roll() {
     if (Wire.available() == 1) data[i] = Wire.read();
   }
 
-  gyro_x_raw = ((data[1] * 256) + data[0]);
-  gyro_y_raw = ((data[3] * 256) + data[2]);
-  gyro_z_raw = ((data[5] * 256) + data[4]);
+  gyro_x_raw = (int16_t) data[1] << 8 | (int16_t) data[0];
+  gyro_y_raw = (int16_t) data[3] << 8 | (int16_t) data[2];
+  gyro_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
 
   for (int i = 0; i < 6; i++) {
     Wire.beginTransmission(ACC_ADDR);
@@ -160,9 +131,9 @@ void calculate_pitch_roll() {
     if (Wire.available() == 1) data[i] = Wire.read();
   }
 
-  acc_x_raw = ((data[1] * 256) + data[0]);
-  acc_y_raw = ((data[3] * 256) + data[2]);
-  acc_z_raw = ((data[5] * 256) + data[4]);
+  acc_x_raw = (int16_t) data[1] << 8 | (int16_t) data[0];
+  acc_y_raw = (int16_t) data[3] << 8 | (int16_t) data[2];
+  acc_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
 
   gyro_x_raw -= gyro_cal[1];
   gyro_y_raw -= gyro_cal[2];
@@ -183,9 +154,12 @@ void calculate_pitch_roll() {
   angle_yaw += gyro_z * 0.0000875;
 
   //Accelerometer angle calculations
-  angle_roll_acc = (float) (atan2(acc_y, acc_z)) * RAD_TO_DEG;
-  angle_pitch_acc = (float) (atan2(acc_z, acc_x))* RAD_TO_DEG;
-  angle_roll_acc -= (float) 90.0;
+  angle_roll_acc = (float) (atan2(acc_z, acc_x)) * RAD_TO_DEG;
+  angle_pitch_acc = (float) (atan2(acc_y, acc_z)) * RAD_TO_DEG;
+  
+  angle_roll_acc = (float) - 90.0 - angle_roll_acc;
+  if (angle_pitch_acc > 0) angle_pitch_acc = (float) 180.0 - angle_pitch_acc;
+  else angle_pitch_acc = (float) - 180.0 - angle_pitch_acc;
 
   angle_roll_acc -= acc_cal_roll;                                       //Accelerometer calibration value for roll.
   angle_pitch_acc -= acc_cal_pitch;                                     //Accelerometer calibration value for pitch.
@@ -199,9 +173,9 @@ void calculate_pitch_roll() {
   roll_level_adjust = roll * 15;                                      //Calculate the roll angle correction
   pitch_level_adjust = pitch * 15;                                    //Calculate the pitch angle correction
 
-  //  Serial.print(roll);
-  //  Serial.print(",");
-  //  Serial.println(pitch);
+//  Serial.print(roll);
+//  Serial.print(",");
+//  Serial.println(pitch);
 }
 
 void calculate_moving_average() {
@@ -240,5 +214,42 @@ void calculate_moving_average() {
 
   if (acc_loop_counter == 15) acc_loop_counter = 0;
   else acc_loop_counter++;
+}
+
+void setup_sensor() {
+  Wire.beginTransmission(GYRO_ADDR);      //GYROSCOPE
+  Wire.write(0x20);                       //Control register 1
+  Wire.write(0x4F);                       //Write 01001111 --> 190Hz, 12.5 cutoff, Power up
+  Wire.endTransmission();
+
+  Wire.beginTransmission(GYRO_ADDR);      //GYROSCOPE
+  Wire.write(0x23);                       //Control register 4
+  Wire.write(0x10);                       //Write 00010000 --> 500dps
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ACC_ADDR);       //ACCELEROMETER
+  Wire.write(0x20);                       //Control register 1
+  Wire.write(0x77);                       //Write 01110111 --> 200Hz, Power up
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ACC_ADDR);       //ACCELEROMETER
+  Wire.write(0x21);                       //Control register 2
+  Wire.write(0x18);                       //Write 00011000 --> +/- 8g
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
+  Wire.write(0x24);                       //Control register 5
+  Wire.write(0x74);                       //Write 01110100 --> Disable temp, high res, 100Hz
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
+  Wire.write(0x25);                       //Control register 6
+  Wire.write(0x40);                       //Write 01000000 -->  +/-8 gauss
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ACC_ADDR);       //MAGNETOMETER
+  Wire.write(0x26);                       //Control register 7
+  Wire.write(0x00);                       //Write 00000000 --> Continuous-conversion mode
+  Wire.endTransmission();
 }
 
