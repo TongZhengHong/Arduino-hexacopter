@@ -9,7 +9,7 @@
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.4;  //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.001;  //Gain setting for the roll I-controller
+float pid_i_gain_roll = 0.00;  //Gain setting for the roll I-controller
 float pid_d_gain_roll = 0.3;    //G ain setting for the roll D-controller
 uint16_t pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
 uint16_t pid_max_i_roll = 100;     //Eliminate I controller windup
@@ -128,16 +128,9 @@ void setup() {
   PORTD_PCR3 = (1 << 8); //configuring pin 8 as GPIO
   PORTD_PCR4 = (1 << 8); //configuring pin 6 as GPIO
   PORTD_PCR7 = (1 << 8); //configuring pin 5 as GPIO
-
-#ifdef QUADCOPTER
-  GPIOD_PDDR |= 156; //0000 0000 0000 0000 0000 0000 1001 1100 --> Setting pins 5,6,7,8 as outputs
-#endif
-
-#ifdef HEXCOPTER
   PORTD_PCR5 = (1 << 8); //configuring pin 20 as GPIO
   PORTD_PCR6 = (1 << 8); //configuring pin 21 as GPIO
   GPIOD_PDDR |= 252; //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as outputs
-#endif
 
   PORTC_PCR5 = (1 << 8);  //configuring LED pin as GPIO
   GPIOC_PDDR = (1 << 5);  //configuring LED pin as an output
@@ -170,17 +163,21 @@ void setup() {
   calibrate_sensors();
   digitalWrite(13, LOW);
 
-  //  Serial.print("Connect your battery in: ");
-  //  for (int i = 5; i > 0; i--) {
-  //    Serial.print((String) i + " ");
-  //    delay(1000);
-  //    pulse_esc();
-  //  }
-  //  Serial.println();
-  //  Serial.println("Battery left: " + (String) calculate_battery());
-  //  Serial.println("Setup DONE!");
+  Serial.print("Connect your battery in: ");
+  for (int i = 5; i > 0; i--) {
+    Serial.print((String) i + " ");
+    delay(900);
+    pulse_esc();
+  }
+  Serial.println();
+  Serial.println("Battery left: " + (String) calculate_battery());
+  Serial.println("Setup DONE!");
 
   delay(1000);
+
+  digitalWrite(13, HIGH);
+  delay(200);
+  digitalWrite(13, LOW);
 }
 
 void loop() {
@@ -253,19 +250,10 @@ int calculate_battery() {
 }
 
 void pulse_esc() {
-#ifdef QUADCOPTER
-  GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
-  delayMicroseconds(1000);
-  GPIOD_PCOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as LOW
-  delay(3);
-#endif
-
-#ifdef HEXCOPTER
   GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
   delayMicroseconds(1000);
   GPIOD_PCOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as LOW
   delay(3);
-#endif
 }
 
 void maintain_loop_time () {

@@ -11,9 +11,9 @@ void calculate_esc_output () {
     if (throttle > 1750) throttle = 1750;                                   //We need some room to keep full control at full throttle.
 
 #ifdef QUADCOPTER
-    esc_1 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
+    esc_1 = 1000; //throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
     esc_2 = throttle + pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
-    esc_3 = throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
+    esc_3 = 1000; //throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
     esc_4 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
 #endif
 
@@ -27,17 +27,17 @@ void calculate_esc_output () {
 #endif
 
     if (battery_voltage < 1680 && battery_voltage > 1320) {                  //Is the battery connected?
-      esc_1 += esc_1 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-1 pulse for voltage drop.
-      esc_2 += esc_2 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-2 pulse for voltage drop.
-      esc_3 += esc_3 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-3 pulse for voltage drop.
-      esc_4 += esc_4 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-4 pulse for voltage drop.
-      esc_5 += esc_5 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-5 pulse for voltage drop.
-      esc_6 += esc_6 * ((1680 - battery_voltage) / (float)3500);            //Compensate the esc-6 pulse for voltage drop.
+      esc_1 += esc_1 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-1 pulse for voltage drop.
+      esc_2 += esc_2 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-2 pulse for voltage drop.
+      esc_3 += esc_3 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-3 pulse for voltage drop.
+      esc_4 += esc_4 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-4 pulse for voltage drop.
+      esc_5 += esc_5 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-5 pulse for voltage drop.
+      esc_6 += esc_6 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-6 pulse for voltage drop.
     }
 
-    if (esc_1 < 1110) esc_1 = 1110;                                         //Keep the motors running.
+    //if (esc_1 < 1110) esc_1 = 1110;                                         //Keep the motors running.
     if (esc_2 < 1110) esc_2 = 1110;                                         //Keep the motors running.
-    if (esc_3 < 1110) esc_3 = 1110;                                         //Keep the motors running.
+    //if (esc_3 < 1110) esc_3 = 1110;                                         //Keep the motors running.
     if (esc_4 < 1110) esc_4 = 1110;                                         //Keep the motors running.
     if (esc_5 < 1110) esc_5 = 1110;                                         //Keep the motors running.
     if (esc_6 < 1110) esc_6 = 1110;                                         //Keep the motors running.
@@ -64,10 +64,10 @@ void set_escs() {
 #ifdef QUADCOPTER
   GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
 
-  timer_channel_1 = esc_1 + loop_timer; //Calculate the time of the faling edge of the esc-1 pulse.
-  timer_channel_2 = esc_2 + loop_timer; //Calculate the time of the faling edge of the esc-2 pulse.
-  timer_channel_3 = esc_3 + loop_timer; //Calculate the time of the faling edge of the esc-3 pulse.
-  timer_channel_4 = esc_4 + loop_timer; //Calculate the time of the faling edge of the esc-4 pulse.
+  timer_channel_1 = esc_1 + loop_timer; //Calculate the time of the falling edge of the esc-1 pulse.
+  timer_channel_2 = esc_2 + loop_timer; //Calculate the time of the falling edge of the esc-2 pulse.
+  timer_channel_3 = esc_3 + loop_timer; //Calculate the time of the falling edge of the esc-3 pulse.
+  timer_channel_4 = esc_4 + loop_timer; //Calculate the time of the falling edge of the esc-4 pulse.
 
   while (GPIOD_PDOR >= 4)  {                //Stay in this loop until output 4 - 7 are LOW.
     esc_loop_timer = micros();          //Read the current time.
@@ -81,12 +81,12 @@ void set_escs() {
 #ifdef HEXCOPTER
   GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
 
-  timer_channel_1 = esc_1 + loop_timer; //Calculate the time of the faling edge of the esc-1 pulse.
-  timer_channel_2 = esc_2 + loop_timer; //Calculate the time of the faling edge of the esc-2 pulse.
-  timer_channel_3 = esc_3 + loop_timer; //Calculate the time of the faling edge of the esc-3 pulse.
-  timer_channel_4 = esc_4 + loop_timer; //Calculate the time of the faling edge of the esc-4 pulse.
-  timer_channel_5 = esc_5 + loop_timer; //Calculate the time of the faling edge of the esc-3 pulse.
-  timer_channel_6 = esc_6 + loop_timer; //Calculate the time of the faling edge of the esc-4 pulse.
+  timer_channel_1 = esc_1 + loop_timer; //Calculate the time of the falling edge of the esc-1 pulse.
+  timer_channel_2 = esc_2 + loop_timer; //Calculate the time of the falling edge of the esc-2 pulse.
+  timer_channel_3 = esc_3 + loop_timer; //Calculate the time of the falling edge of the esc-3 pulse.
+  timer_channel_4 = esc_4 + loop_timer; //Calculate the time of the falling edge of the esc-4 pulse.
+  timer_channel_5 = esc_5 + loop_timer; //Calculate the time of the falling edge of the esc-5 pulse.
+  timer_channel_6 = esc_6 + loop_timer; //Calculate the time of the falling edge of the esc-6 pulse.
 
   while (GPIOD_PDOR >= 4)  {                //Stay in this loop until output 4 - 7 are LOW.
     esc_loop_timer = micros();          //Read the current time.

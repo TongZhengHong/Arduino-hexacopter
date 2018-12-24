@@ -1,4 +1,5 @@
 bool first_start = true;
+float temp_heading;
 
 void calculate_heading() {
   uint8_t data[6];
@@ -19,16 +20,17 @@ void calculate_heading() {
   mag_x = (mag_x_raw - mag_cal[1]) * mag_cal[0];
   mag_y = (mag_y_raw - mag_cal[3]) * mag_cal[2];
   mag_z = (mag_z_raw - mag_cal[5]) * mag_cal[4];
+  mag_z *= -1;
 
   //Tilt compensation
   float roll_angle = roll * DEG_TO_RAD;
-  float pitch_angle = pitch * DEG_TO_RAD; 
-  
-  compass_x = mag_x * cos(pitch_angle)
-              + mag_y * sin(roll_angle) * sin(pitch_angle)
+  float pitch_angle = pitch * DEG_TO_RAD;
+
+  compass_x = mag_y * cos(pitch_angle)
+              + mag_x * sin(roll_angle) * sin(pitch_angle)
               - mag_z * cos(roll_angle) * sin(pitch_angle);
 
-  compass_y = mag_y * cos(roll_angle)
+  compass_y = mag_x * cos(roll_angle)
               + mag_z * sin(roll_angle);
 
   if (compass_x == 0) {
@@ -48,8 +50,19 @@ void calculate_heading() {
   if (angle_yaw < 0) angle_yaw += 360;
   else if (angle_yaw >= 360) angle_yaw -= 360;
 
-  heading = angle_yaw * 0.99 + compass_heading * 0.01;
+  if (abs(angle_yaw - compass_heading) > 330) {
+    angle_yaw = compass_heading;
+  } else {
+    angle_yaw = angle_yaw * 0.95 + compass_heading * 0.05;
+  }
   
+  if (roll > -2 && roll < 2 && pitch > -2 && pitch < 2) {
+    heading = angle_yaw;
+    temp_heading = heading;
+  } else {
+    heading = temp_heading;
+  }
+
 //  Serial.println(heading);
 }
 

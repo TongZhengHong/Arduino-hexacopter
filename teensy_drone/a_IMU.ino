@@ -173,9 +173,9 @@ void calculate_pitch_roll() {
   roll_level_adjust = roll * 15;                                      //Calculate the roll angle correction
   pitch_level_adjust = pitch * 15;                                    //Calculate the pitch angle correction
 
-//  Serial.print(roll);
-//  Serial.print(",");
-//  Serial.println(pitch);
+  Serial.print(roll);
+  Serial.print(",");
+  Serial.println(pitch);
 }
 
 void calculate_moving_average() {

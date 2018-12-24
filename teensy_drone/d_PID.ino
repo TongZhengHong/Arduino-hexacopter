@@ -44,12 +44,12 @@ void set_pid_offsets() {
       heading_hold = true;
     }
   }
-//    Serial.print(pid_roll_setpoint);
-//    Serial.print(" ");
-//    Serial.print(pid_pitch_setpoint);
-//    Serial.print(" ");
-//    Serial.print(pid_yaw_setpoint);
-//    Serial.println();
+  //    Serial.print(pid_roll_setpoint);
+  //    Serial.print(" ");
+  //    Serial.print(pid_pitch_setpoint);
+  //    Serial.print(" ");
+  //    Serial.print(pid_yaw_setpoint);
+  //    Serial.println();
 }
 
 void calculate_pid() {
@@ -82,10 +82,10 @@ void calculate_pid() {
     float diff = heading - pid_yaw_setpoint;
     if (diff > 180) pid_yaw_setpoint += 360;
     else if (diff < -180) pid_yaw_setpoint -= 360;
-    pid_error_temp = (heading - pid_yaw_setpoint) * -10.0;
+    pid_error_temp = (heading - pid_yaw_setpoint) * -3.0;
     heading_hold = false;
   } else pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
-  
+
   pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
   if (pid_i_mem_yaw > pid_max_yaw)pid_i_mem_yaw = pid_max_yaw;
   else if (pid_i_mem_yaw < pid_max_yaw * -1) pid_i_mem_yaw = pid_max_yaw * -1;
@@ -96,9 +96,9 @@ void calculate_pid() {
 
   pid_last_yaw_d_error = pid_error_temp;
 
-    Serial.print(" ");
-    Serial.println(pid_output_roll);
-    Serial.println(pid_output_pitch);
-    Serial.println(pid_output_yaw);
-    Serial.println();
+//  Serial.print(" ");
+//  Serial.println(pid_output_roll);
+//  Serial.println(pid_output_pitch);
+//  Serial.println(pid_output_yaw);
+//  Serial.println();
 }
