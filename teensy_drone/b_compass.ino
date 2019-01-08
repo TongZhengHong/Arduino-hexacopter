@@ -17,14 +17,17 @@ void calculate_heading() {
   mag_z_raw = (int16_t) data[5] << 8 | (int16_t) data[4];
 
   //Apply magnetometer calibration scales and offsets to raw output
-  mag_x = (mag_x_raw - mag_cal[1]) * mag_cal[0];
-  mag_y = (mag_y_raw - mag_cal[3]) * mag_cal[2];
-  mag_z = (mag_z_raw - mag_cal[5]) * mag_cal[4];
+//  mag_x = mag_x_raw - mag_cal[1]; //(mag_x_raw - mag_cal[1]) * mag_cal[0];
+//  mag_y = mag_y_raw - mag_cal[3]; //(mag_y_raw - mag_cal[3]) * mag_cal[2];
+//  mag_z = mag_z_raw - mag_cal[5]; //(mag_z_raw - mag_cal[5]) * mag_cal[4];
+  mag_x = mag_x_raw;
+  mag_y = mag_y_raw;
+  mag_z = mag_z_raw;
   mag_z *= -1;
 
   //Tilt compensation
-  float roll_angle = roll * DEG_TO_RAD;
-  float pitch_angle = pitch * DEG_TO_RAD;
+  float roll_angle = angle_roll * DEG_TO_RAD;
+  float pitch_angle = angle_pitch * DEG_TO_RAD;
 
   compass_x = mag_y * cos(pitch_angle)
               + mag_x * sin(roll_angle) * sin(pitch_angle)
@@ -56,13 +59,14 @@ void calculate_heading() {
     angle_yaw = angle_yaw * 0.95 + compass_heading * 0.05;
   }
   
-  if (roll > -2 && roll < 2 && pitch > -2 && pitch < 2) {
-    heading = angle_yaw;
-    temp_heading = heading;
-  } else {
-    heading = temp_heading;
-  }
+//  if (roll > -2 && roll < 2 && pitch > -2 && pitch < 2) {
+//    heading = angle_yaw;
+//    temp_heading = heading;
+//  } else {
+//    heading = temp_heading;
+//  }
 
+  heading = angle_yaw;
 //  Serial.println(heading);
 }
 

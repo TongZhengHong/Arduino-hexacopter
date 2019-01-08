@@ -157,9 +157,9 @@ void calculate_pitch_roll() {
   angle_roll_acc = (float) (atan2(acc_z, acc_x)) * RAD_TO_DEG;
   angle_pitch_acc = (float) (atan2(acc_y, acc_z)) * RAD_TO_DEG;
   
-  angle_roll_acc = (float) - 90.0 - angle_roll_acc;
+  angle_roll_acc = (float) -90.0 - angle_roll_acc;
   if (angle_pitch_acc > 0) angle_pitch_acc = (float) 180.0 - angle_pitch_acc;
-  else angle_pitch_acc = (float) - 180.0 - angle_pitch_acc;
+  else angle_pitch_acc = (float) -180.0 - angle_pitch_acc;
 
   angle_roll_acc -= acc_cal_roll;                                       //Accelerometer calibration value for roll.
   angle_pitch_acc -= acc_cal_pitch;                                     //Accelerometer calibration value for pitch.

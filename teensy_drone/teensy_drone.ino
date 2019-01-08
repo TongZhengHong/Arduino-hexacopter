@@ -1,11 +1,18 @@
 #include <Wire.h>
 #include <EEPROM.h>
 
+//#include <SPI.h>
+//#include <nRF24L01.h>
+//#include <RF24.h>
+
 #define QUADCOPTER
 //#define HEXCOPTER
 
 #define GYRO_ADDR 0x6B
 #define ACC_ADDR 0x1D
+
+//RF24 radio(9, 10); // CE, CSN
+//const byte address[6] = "00001";
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.4;  //Gain setting for the roll P-controller
@@ -38,6 +45,8 @@ uint16_t pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
 
 //Misc. variables
 uint8_t start;
+float voltage;
+uint16_t battery_voltage;
 uint32_t difference, main_loop_timer;
 byte eeprom_data[75];
 
@@ -138,22 +147,22 @@ void setup() {
 
   Serial.println("Welcome to flight controller setup!");
   Serial.println("Turn on your transmitter and place throttle at lowest position!");
-  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-    start++;                                                //While waiting increment start whith every loop.
-
-    //    Serial.println(receiver_input_channel_3);
-    //    Serial.println(receiver_input_channel_4);
-    //    Serial.println();
-
-    pulse_esc();
-    if (start == 125) {
-      digitalWrite(13, !digitalRead(13));                   //Change the led status.
-      start = 0;                                            //Start again at 0.
-    }
-  }
-  start = 0;
+//  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+//    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+//    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+//    start++;                                                //While waiting increment start whith every loop.
+//
+//    //    Serial.println(receiver_input_channel_3);
+//    //    Serial.println(receiver_input_channel_4);
+//    //    Serial.println();
+//
+//    pulse_esc();
+//    if (start == 125) {
+//      digitalWrite(13, !digitalRead(13));                   //Change the led status.
+//      start = 0;                                            //Start again at 0.
+//    }
+//  }
+//  start = 0;
   Serial.println("Transmitter detected!");
 
   delay(500);
@@ -170,7 +179,8 @@ void setup() {
     pulse_esc();
   }
   Serial.println();
-  Serial.println("Battery left: " + (String) calculate_battery());
+  calculate_battery();
+  Serial.println("Battery left: " + (String) battery_voltage);
   Serial.println("Setup DONE!");
 
   delay(1000);
@@ -178,6 +188,11 @@ void setup() {
   digitalWrite(13, HIGH);
   delay(200);
   digitalWrite(13, LOW);
+
+//  radio.begin();
+//  radio.openWritingPipe(address);
+//  radio.setPALevel(RF24_PA_MIN);
+//  radio.stopListening();
 }
 
 void loop() {
@@ -187,7 +202,7 @@ void loop() {
 
   calculate_pitch_roll();
 
-  calculate_heading();
+//  calculate_heading();
 
   set_pid_offsets();
 
@@ -196,6 +211,9 @@ void loop() {
   calculate_esc_output();
 
   set_escs();
+
+  calculate_battery();
+//  radio.write(&roll, sizeof(roll));
 
   maintain_loop_time();
 }
@@ -237,16 +255,15 @@ void check_start_stop() {
   }
 }
 
-int calculate_battery() {
-  float diodeForward = 0.5;
-  float reading_error = 0.3;
-  float potDivider = 3.546; // 1 / (22/(22+56))
+void calculate_battery() {
+  float diodeForward = 0.4;
+  float reading_error = -0.34;
+  float potDivider = 5.0244; // 1 / (82/(82+330))
 
-  int sensorValue = analogRead(A0);
-  float voltage = sensorValue * (5.0 / 1023);
-  int battery_voltage = 100 * ((voltage - reading_error) * potDivider + diodeForward);
-
-  return battery_voltage;
+  int sensorValue = analogRead(A14);
+  float analog_voltage = sensorValue * (3.3 / 1024);
+  voltage = voltage * 0.95 + analog_voltage * 0.05;
+  battery_voltage = 100 * ((voltage - reading_error) * potDivider + diodeForward);
 }
 
 void pulse_esc() {

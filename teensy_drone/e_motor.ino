@@ -4,16 +4,15 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 unsigned long esc_timer, esc_loop_timer, loop_timer;
 
 void calculate_esc_output () {
-  int battery_voltage = calculate_battery();
   throttle = receiver_input_channel_3;                                      //We need the throttle signal as a base signal.
 
   if (start == 2) {                                                         //The motors are started.
     if (throttle > 1750) throttle = 1750;                                   //We need some room to keep full control at full throttle.
 
 #ifdef QUADCOPTER
-    esc_1 = 1000; //throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
+    esc_1 = throttle - pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
     esc_2 = throttle + pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
-    esc_3 = 1000; //throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
+    esc_3 = throttle + pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
     esc_4 = throttle - pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
 #endif
 
@@ -35,12 +34,12 @@ void calculate_esc_output () {
       esc_6 += esc_6 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-6 pulse for voltage drop.
     }
 
-    //if (esc_1 < 1110) esc_1 = 1110;                                         //Keep the motors running.
-    if (esc_2 < 1110) esc_2 = 1110;                                         //Keep the motors running.
-    //if (esc_3 < 1110) esc_3 = 1110;                                         //Keep the motors running.
-    if (esc_4 < 1110) esc_4 = 1110;                                         //Keep the motors running.
-    if (esc_5 < 1110) esc_5 = 1110;                                         //Keep the motors running.
-    if (esc_6 < 1110) esc_6 = 1110;                                         //Keep the motors running.
+    //if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
+    //if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
+    if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
+    if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+    if (esc_5 < 1100) esc_5 = 1100;                                         //Keep the motors running.
+    if (esc_6 < 1100) esc_6 = 1100;                                         //Keep the motors running.
 
     if (esc_1 > 1900) esc_1 = 1900;                                          //Limit the esc-1 pulse to 1900us.
     if (esc_2 > 1900) esc_2 = 1900;                                          //Limit the esc-2 pulse to 1900us.
